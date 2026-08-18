@@ -1,0 +1,25 @@
+:root {
+  color-scheme: light;
+  --navy-950: #071321;
+  --navy-900: #0b1a2b;
+  --navy-800: #16283b;
+  --blue-700: #075bc7;
+  --blue-600: #0a69dc;
+  --blue-100: #e6f0ff;
+  --green-600: #10a445;
+  --green-100: #e8f7ed;
+  --amber-600: #df8b00;
+  --red-600: #e1261c;
+  --red-700: #c81f17;
+  --ink-900: #17212d;
+  --ink-700: #3e4b5a;
+  --ink-500: #6d7885;
+  --line-300: #cbd4df;
+  --line-200: #dce3ea;
+  --surface-100: #f4f7fa;
+  --surface-50: #fafbfd;
+  --white: #ffffff;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --font-ui: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+}
