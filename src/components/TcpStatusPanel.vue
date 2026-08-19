@@ -90,7 +90,7 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
       <h3>关节状态</h3>
       <div class="table-scroll">
         <ElTable
-          class="joint-status-table"
+          class="joint-status-table adaptive-table"
           :data="rows"
           :row-key="rowKey"
           :current-row-key="store.selectedJointId"
@@ -132,36 +132,38 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
     </section>
 
     <section v-if="selected" class="quick-control">
-      <div>
+      <div class="quick-title">
         <strong>{{ selected.displayName }}</strong>
-        <small>目标值</small>
+        <small>关节目标</small>
       </div>
-      <ElButton
-        class="jog-button"
-        aria-label="减小目标值"
-        @click="controller.jogJoint(selected.id, -1 / selected.displayScale)"
-      >
-        −
-      </ElButton>
-      <ElSlider
-        size="small"
-        :model-value="selected.target"
-        :min="selected.min"
-        :max="selected.max"
-        :step="selected.kind === 'prismatic' || selected.kind === 'virtual' ? 0.001 : 0.01"
-        :show-tooltip="false"
-        :aria-label="`${selected.displayName} 目标值`"
-        @input="setJointTarget(selected, $event)"
-      />
-      <ElButton
-        class="jog-button"
-        aria-label="增大目标值"
-        @click="controller.jogJoint(selected.id, 1 / selected.displayScale)"
-      >
-        ＋
-      </ElButton>
-      <label>
-        <span>目标</span>
+      <div class="jog-control">
+        <ElButton
+          class="jog-button"
+          aria-label="减小目标值"
+          @click="controller.jogJoint(selected.id, -1 / selected.displayScale)"
+        >
+          −
+        </ElButton>
+        <ElSlider
+          size="small"
+          :model-value="selected.target"
+          :min="selected.min"
+          :max="selected.max"
+          :step="selected.kind === 'prismatic' || selected.kind === 'virtual' ? 0.001 : 0.01"
+          :show-tooltip="false"
+          :aria-label="`${selected.displayName} 目标值`"
+          @input="setJointTarget(selected, $event)"
+        />
+        <ElButton
+          class="jog-button"
+          aria-label="增大目标值"
+          @click="controller.jogJoint(selected.id, 1 / selected.displayScale)"
+        >
+          ＋
+        </ElButton>
+      </div>
+      <label class="target-input">
+        <span>目标值</span>
         <ElInputNumber
           size="small"
           :model-value="Number(display(selected, selected.target))"
@@ -173,11 +175,13 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           @change="setFromDisplay(selected, $event)"
         />
       </label>
-      <label class="speed-input">
-        <span>速度 ({{ selected.displayUnit }}/s)</span>
-        <strong>{{
-          Math.abs(toDisplayValue(selected, selected.maxVelocity * store.speedScale)).toFixed(1)
-        }}</strong>
+      <div class="speed-input">
+        <div>
+          <span>速度 ({{ selected.displayUnit }}/s)</span>
+          <strong>{{
+            Math.abs(toDisplayValue(selected, selected.maxVelocity * store.speedScale)).toFixed(1)
+          }}</strong>
+        </div>
         <ElSlider
           size="small"
           :model-value="store.speedScale"
@@ -188,7 +192,7 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           aria-label="速度倍率"
           @input="setSpeedScale"
         />
-      </label>
+      </div>
     </section>
 
     <section class="controller-card">
@@ -220,7 +224,7 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 90px minmax(0, 1fr) 70px 66px;
+  grid-template-rows: 90px minmax(0, 1fr) 72px 66px;
   gap: 10px;
   padding: 10px;
   overflow: hidden;
@@ -298,57 +302,67 @@ h3 {
 }
 .quick-control {
   display: grid;
-  grid-template-columns: 105px 34px minmax(110px, 1fr) 34px 96px 130px;
+  grid-template-columns: minmax(88px, 0.7fr) minmax(220px, 2.5fr) 96px minmax(132px, 1fr);
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 12px;
+  padding: 9px 12px;
 }
-.quick-control > div {
+.quick-title {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
-.quick-control small,
-.quick-control label span {
+.quick-title small,
+.target-input span,
+.speed-input span {
   color: var(--ink-500);
   font-size: 11px;
 }
+.jog-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 32px minmax(100px, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+}
 .quick-control :deep(.jog-button) {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   padding: 0;
 }
 .quick-control :deep(.el-slider) {
   min-width: 0;
   width: 100%;
 }
-.quick-control > :deep(.el-slider) {
-  align-self: center;
-}
 .quick-control :deep(.el-slider__runway) {
   width: 100%;
+  margin-block: 8px;
 }
-.quick-control label {
+.target-input {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
-.quick-control label :deep(.el-input-number) {
+.target-input :deep(.el-input-number) {
   width: 100%;
 }
-.quick-control .speed-input {
+.speed-input {
+  min-width: 0;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 2px 8px;
+  grid-template-rows: 18px 20px;
+  gap: 3px;
 }
-.quick-control .speed-input span {
-  grid-column: 1 / -1;
+.speed-input > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.quick-control .speed-input strong {
+.speed-input strong {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.quick-control .speed-input :deep(.el-slider) {
+.speed-input :deep(.el-slider) {
   height: 20px;
 }
 .controller-card dl {

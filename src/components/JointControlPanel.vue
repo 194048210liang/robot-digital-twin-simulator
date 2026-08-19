@@ -154,7 +154,7 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </div>
-    <div class="panel-summary">
+    <footer class="panel-summary">
       <div class="speed-control">
         <strong>速度倍率</strong>
         <ElSlider
@@ -223,7 +223,7 @@ onBeforeUnmount(() => {
           </ElPopconfirm>
         </div>
       </div>
-    </div>
+    </footer>
 
     <ElDialog
       v-model="saveDialogVisible"
@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 38px minmax(0, 1fr) 104px;
+  grid-template-rows: 38px minmax(0, 1fr) 96px;
 }
 .joint-head,
 .joint-row {
@@ -361,24 +361,36 @@ onBeforeUnmount(() => {
   color: var(--ink-500);
 }
 .panel-summary {
+  min-height: 0;
   display: grid;
   grid-template-columns: 25% 45% 30%;
+  overflow: hidden;
   border-top: 1px solid var(--line-300);
   background: #fbfcfd;
 }
 .speed-control {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 44px;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 18px minmax(24px, 1fr);
+  column-gap: 12px;
+  row-gap: 6px;
   align-items: center;
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-right: 1px solid var(--line-200);
 }
 .speed-control strong {
-  grid-column: 1 / -1;
+  grid-column: 1;
+}
+.speed-control > span {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--ink-700);
+  font-variant-numeric: tabular-nums;
 }
 .target-control :deep(.el-slider),
 .speed-control :deep(.el-slider) {
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   width: 100%;
   height: 22px;
@@ -388,12 +400,12 @@ onBeforeUnmount(() => {
   margin: 9px 0;
 }
 .tcp-mini {
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-right: 1px solid var(--line-200);
 }
 .tcp-mini strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .tcp-mini dl {
   display: grid;
@@ -417,7 +429,7 @@ dd {
 }
 .task-draft {
   min-width: 0;
-  padding: 8px 10px 6px;
+  padding: 6px 10px;
 }
 .draft-title {
   display: flex;
@@ -431,7 +443,8 @@ dd {
   font-size: 11px;
 }
 .task-draft p {
-  margin: 3px 0 7px;
+  margin: 2px 0 4px;
+  line-height: 12px;
 }
 .draft-actions {
   display: grid;
@@ -440,16 +453,17 @@ dd {
 }
 .draft-actions :deep(.el-button) {
   min-width: 0;
+  height: 28px;
   margin: 0;
   padding-inline: 8px;
 }
 .draft-tools {
   display: flex;
   justify-content: flex-end;
-  height: 20px;
+  height: 16px;
 }
 .draft-tools :deep(.el-button) {
-  min-height: 20px;
+  min-height: 16px;
   padding: 0 5px;
   font-size: 11px;
 }

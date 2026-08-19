@@ -102,11 +102,12 @@ function formatTarget(jointId: string, position: number) {
       </div>
       <ElTable
         v-if="taskStore.tasks.length"
+        class="adaptive-table"
         :data="taskStore.tasks"
-        height="100%"
         border
         size="small"
         row-key="id"
+        height="100%"
       >
         <ElTableColumn type="expand" width="38">
           <template #default="{ row }">
@@ -190,16 +191,15 @@ function formatTarget(jointId: string, position: number) {
         </div>
         <ElTag :type="activeStatusType" effect="plain">{{ activeStatusLabel }}</ElTag>
       </div>
-      <ElProgress
-        :percentage="Math.round(taskStore.runtime.progress)"
-        :stroke-width="8"
-        :status="taskStore.runtime.status === 'completed' ? 'success' : undefined"
-      />
+      <div class="monitor-progress">
+        <span>总进度</span>
+        <ElProgress
+          :percentage="Math.round(taskStore.runtime.progress)"
+          :stroke-width="6"
+          :status="taskStore.runtime.status === 'completed' ? 'success' : undefined"
+        />
+      </div>
       <dl>
-        <div>
-          <dt>总进度</dt>
-          <dd>{{ taskStore.runtime.progress.toFixed(1) }}%</dd>
-        </div>
         <div>
           <dt>当前姿态</dt>
           <dd v-if="taskStore.activeTask">
@@ -213,8 +213,8 @@ function formatTarget(jointId: string, position: number) {
           <dd>{{ formatDuration(taskStore.runtime.elapsedMs) }}</dd>
         </div>
         <div>
-          <dt>播放控制</dt>
-          <dd>使用下方暂停 / 继续 / 停止</dd>
+          <dt>控制</dt>
+          <dd>使用下方按钮</dd>
         </div>
       </dl>
       <p v-if="taskStore.runtime.error" class="task-error">{{ taskStore.runtime.error }}</p>
@@ -227,7 +227,7 @@ function formatTarget(jointId: string, position: number) {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 66px minmax(150px, 1fr) 118px;
+  grid-template-rows: 66px minmax(150px, 1fr) 96px;
   gap: 8px;
   padding: 8px;
   overflow: hidden;
@@ -335,14 +335,19 @@ h3 {
   font-size: 10.5px;
 }
 .task-monitor {
-  padding: 10px 12px;
+  position: relative;
+  display: grid;
+  grid-template-rows: 22px 20px 24px;
+  gap: 4px;
+  padding: 8px 12px;
 }
 .monitor-head {
-  margin-bottom: 9px;
+  min-width: 0;
 }
 .monitor-head > div {
+  min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
 .monitor-head span {
@@ -350,7 +355,26 @@ h3 {
   font-size: 11px;
 }
 .monitor-head strong {
+  overflow: hidden;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-head :deep(.el-tag) {
+  height: 22px;
+}
+.monitor-progress {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.monitor-progress > span {
+  color: var(--ink-500);
+  font-size: 11px;
+}
+.monitor-progress :deep(.el-progress) {
+  min-width: 0;
 }
 .task-monitor :deep(.el-progress__text) {
   min-width: 38px;
@@ -358,11 +382,13 @@ h3 {
 }
 .task-monitor dl {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin: 8px 0 0;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  margin: 0;
 }
 .task-monitor dl div {
   display: flex;
+  align-items: center;
   gap: 7px;
   padding-right: 10px;
   border-right: 1px solid var(--line-200);
@@ -375,11 +401,28 @@ h3 {
 }
 .task-monitor dd {
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .task-error {
-  margin-top: 6px;
+  position: absolute;
+  right: 12px;
+  bottom: 6px;
+  margin: 0;
   color: var(--red-600);
   font-size: 11px;
+}
+@media (max-height: 850px) {
+  .task-list :deep(.el-empty) {
+    padding: 4px 0;
+  }
+  .task-list :deep(.el-empty__image) {
+    display: none;
+  }
+  .task-list :deep(.el-empty__description) {
+    margin-top: 0;
+  }
 }
 </style>

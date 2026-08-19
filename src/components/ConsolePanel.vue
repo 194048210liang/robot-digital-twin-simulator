@@ -52,7 +52,7 @@ function levelLabel(log: RobotLog) {
 
     <div class="log-table-wrap">
       <ElTable
-        class="log-table"
+        class="log-table adaptive-table"
         :data="store.filteredLogs"
         :empty-text="emptyText"
         row-key="id"
@@ -119,7 +119,7 @@ function levelLabel(log: RobotLog) {
   position: relative;
   min-height: 0;
   display: grid;
-  grid-template-rows: 36px minmax(0, 1fr) 54px;
+  grid-template-rows: 36px minmax(0, 1fr) 44px;
   overflow: visible;
 }
 .console-tabs {
@@ -206,7 +206,7 @@ function levelLabel(log: RobotLog) {
 }
 .footer-status i {
   width: 1px;
-  height: 18px;
+  height: 16px;
   background: var(--line-200);
 }
 .footer-status b {
@@ -220,7 +220,7 @@ function levelLabel(log: RobotLog) {
 }
 .footer-actions :deep(.el-button) {
   min-width: 116px;
-  height: 34px;
+  height: 30px;
   margin-left: 0;
   gap: 8px;
 }
