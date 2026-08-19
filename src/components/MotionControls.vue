@@ -5,6 +5,8 @@ import { faForward, faHouse, faPause, faPlay, faStop } from '@fortawesome/free-s
 import { useRobotController } from '@/robot/controller-context'
 import { useRobotStore } from '@/stores/robot'
 
+withDefaults(defineProps<{ showExecute?: boolean }>(), { showExecute: true })
+
 const controller = useRobotController()
 const store = useRobotStore()
 const executeLoading = ref(false)
@@ -74,6 +76,7 @@ async function stop() {
   <div class="motion-controls">
     <ElButtonGroup class="motion-group" role="group" aria-label="运动控制">
       <ElButton
+        v-if="showExecute"
         class="execute-button"
         type="primary"
         plain

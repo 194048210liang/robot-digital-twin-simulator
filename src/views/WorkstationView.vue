@@ -8,27 +8,30 @@ import ConsolePanel from '@/components/ConsolePanel.vue'
 import JointControlPanel from '@/components/JointControlPanel.vue'
 import MotionControls from '@/components/MotionControls.vue'
 import RobotViewport from '@/components/RobotViewport.vue'
+import RobotTaskPanel from '@/components/RobotTaskPanel.vue'
 import TcpStatusPanel from '@/components/TcpStatusPanel.vue'
 import TopStatusBar from '@/components/TopStatusBar.vue'
 import { useRobotWorkstation } from '@/composables/useRobotWorkstation'
 
-type ControlPanel = 'joint' | 'tcp'
+type ControlPanel = 'joint' | 'tcp' | 'task'
 
 const route = useRoute()
 const router = useRouter()
-const activePanel = ref<ControlPanel>(route.query.tab === 'tcp' ? 'tcp' : 'joint')
+const activePanel = ref<ControlPanel>(
+  route.query.tab === 'tcp' || route.query.tab === 'task' ? route.query.tab : 'joint',
+)
 const { currentTime } = useRobotWorkstation()
 
 watch(
   () => route.query.tab,
-  (tab) => (activePanel.value = tab === 'tcp' ? 'tcp' : 'joint'),
+  (tab) => (activePanel.value = tab === 'tcp' || tab === 'task' ? (tab as ControlPanel) : 'joint'),
 )
 
 function selectPanel(panel: TabPaneName) {
-  const nextPanel: ControlPanel = panel === 'tcp' ? 'tcp' : 'joint'
+  const nextPanel: ControlPanel = panel === 'tcp' || panel === 'task' ? panel : 'joint'
   activePanel.value = nextPanel
   void router.replace({
-    query: { ...route.query, tab: nextPanel === 'tcp' ? 'tcp' : undefined },
+    query: { ...route.query, tab: nextPanel === 'joint' ? undefined : nextPanel },
   })
 }
 </script>
@@ -55,12 +58,14 @@ function selectPanel(panel: TabPaneName) {
         >
           <ElTabPane label="关节控制" name="joint" />
           <ElTabPane label="TCP 状态" name="tcp" />
+          <ElTabPane label="机器人任务" name="task" />
         </ElTabs>
         <div class="control-content">
-          <JointControlPanel v-if="activePanel === 'joint'" />
-          <TcpStatusPanel v-else />
+          <JointControlPanel v-show="activePanel === 'joint'" />
+          <TcpStatusPanel v-show="activePanel === 'tcp'" />
+          <RobotTaskPanel v-show="activePanel === 'task'" />
         </div>
-        <MotionControls />
+        <MotionControls :show-execute="false" />
       </section>
     </main>
     <ConsolePanel />

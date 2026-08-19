@@ -28,6 +28,17 @@ export class RobotSimulator {
     this.motionActive = true
   }
 
+  setJointPosition(jointId: string, position: number) {
+    const joint = this.store.findJoint(jointId)
+    if (!joint) return false
+    joint.current = position
+    joint.target = position
+    joint.velocity = 0
+    this.motionActive = false
+    this.store.motionState = 'idle'
+    return true
+  }
+
   stopMotion() {
     this.motionActive = false
     for (const joint of this.store.joints) {

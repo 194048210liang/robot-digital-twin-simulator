@@ -7,7 +7,7 @@ import type {
   LogChannel,
   RobotLog,
   SafetyState,
-  TcpPose,
+  TcpState,
   MotionState,
 } from '@/robot/types'
 
@@ -36,7 +36,12 @@ export const useRobotStore = defineStore('robot', () => {
   const modelError = ref('')
   const speedScale = ref(0.5)
   const fps = ref(0)
-  const tcpPose = ref<TcpPose>({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 })
+  const tcpState = ref<TcpState>({
+    pose: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+    sourceLink: '',
+    timestamp: 0,
+  })
+  const tcpPose = computed(() => tcpState.value.pose)
   const consoleTab = ref<LogChannel>('communication')
   const logs = ref<RobotLog[]>([])
 
@@ -61,8 +66,8 @@ export const useRobotStore = defineStore('robot', () => {
     logs.value = []
   }
 
-  function setTcpPose(pose: TcpPose) {
-    tcpPose.value = pose
+  function setTcpState(state: TcpState) {
+    tcpState.value = state
   }
 
   return {
@@ -76,6 +81,7 @@ export const useRobotStore = defineStore('robot', () => {
     modelError,
     speedScale,
     fps,
+    tcpState,
     tcpPose,
     consoleTab,
     logs,
@@ -84,6 +90,6 @@ export const useRobotStore = defineStore('robot', () => {
     findJoint,
     addLog,
     clearLogs,
-    setTcpPose,
+    setTcpState,
   }
 })

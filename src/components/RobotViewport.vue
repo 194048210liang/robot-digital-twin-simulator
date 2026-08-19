@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
   faCamera,
   faCompress,
+  faCrosshairs,
+  faEraser,
   faHouse,
   faRotate,
+  faRoute,
   faTableCellsLarge,
 } from '@fortawesome/free-solid-svg-icons'
 import { RobotScene } from '@/graphics/robot-scene'
 import { useRobotStore } from '@/stores/robot'
+import { useTrajectoryStore } from '@/stores/trajectory'
 
 const store = useRobotStore()
+const trajectory = useTrajectoryStore()
 const container = ref<HTMLElement>()
-const scene = ref<RobotScene>()
+const scene = shallowRef<RobotScene>()
 const autoRotating = ref(false)
 const gridVisible = ref(true)
 
@@ -21,7 +26,10 @@ onMounted(async () => {
   if (!container.value) return
   scene.value = new RobotScene(container.value, {
     onFps: (fps) => (store.fps = fps),
-    onTcpPose: store.setTcpPose,
+    onTcpState: (state) => {
+      store.setTcpState(state)
+      trajectory.sample(state, store.motionState === 'running')
+    },
     onModelLoaded: () => {
       store.modelLoaded = true
       store.modelError = ''
@@ -53,6 +61,9 @@ onMounted(async () => {
   try {
     await scene.value.loadRobot(`${import.meta.env.BASE_URL}robot.urdf`)
     scene.value.setJointValues(store.joints)
+    scene.value.setTcpFrameVisible(trajectory.tcpFrameVisible)
+    scene.value.setTrajectoryVisible(trajectory.trajectoryVisible)
+    scene.value.setTrajectory(trajectory.points)
     scene.value.fitCamera()
   } catch {
     // 错误已通过场景回调写入状态与日志。
@@ -64,6 +75,21 @@ watch(
   () => scene.value?.setJointValues(store.joints),
 )
 
+watch(
+  () => trajectory.revision,
+  () => scene.value?.setTrajectory(trajectory.points),
+)
+
+watch(
+  () => trajectory.tcpFrameVisible,
+  (visible) => scene.value?.setTcpFrameVisible(visible),
+)
+
+watch(
+  () => trajectory.trajectoryVisible,
+  (visible) => scene.value?.setTrajectoryVisible(visible),
+)
+
 onBeforeUnmount(() => scene.value?.dispose())
 
 function toggleAutoRotate() {
@@ -72,6 +98,22 @@ function toggleAutoRotate() {
 
 function toggleGrid() {
   gridVisible.value = scene.value?.toggleGrid() ?? true
+}
+
+function clearTrajectory() {
+  const pointCount = trajectory.pointCount
+  if (pointCount === 0) return
+  trajectory.clear()
+  store.addLog({
+    level: 'info',
+    channel: 'command',
+    direction: 'SYS',
+    source: '轨迹',
+    code: 'TRAJECTORY-CLEAR',
+    message: '已清空 TCP 运动轨迹',
+    details: `移除 ${pointCount} 个轨迹点`,
+    status: '成功',
+  })
 }
 </script>
 
@@ -110,12 +152,44 @@ function toggleGrid() {
             <FontAwesomeIcon :icon="faTableCellsLarge" />
           </ElButton>
         </ElTooltip>
+        <ElTooltip content="TCP 坐标系" placement="bottom">
+          <ElButton
+            :class="{ active: trajectory.tcpFrameVisible }"
+            :aria-pressed="trajectory.tcpFrameVisible"
+            aria-label="TCP 坐标系"
+            @click="trajectory.toggleTcpFrame()"
+          >
+            <FontAwesomeIcon :icon="faCrosshairs" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="运动轨迹" placement="bottom">
+          <ElButton
+            :class="{ active: trajectory.trajectoryVisible }"
+            :aria-pressed="trajectory.trajectoryVisible"
+            aria-label="运动轨迹"
+            @click="trajectory.toggleTrajectory()"
+          >
+            <FontAwesomeIcon :icon="faRoute" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="清空轨迹" placement="bottom">
+          <ElButton
+            aria-label="清空轨迹"
+            :disabled="trajectory.pointCount === 0"
+            @click="clearTrajectory"
+          >
+            <FontAwesomeIcon :icon="faEraser" />
+          </ElButton>
+        </ElTooltip>
         <ElTooltip content="保存截图" placement="bottom">
           <ElButton aria-label="保存截图" @click="scene?.downloadScreenshot()">
             <FontAwesomeIcon :icon="faCamera" />
           </ElButton>
         </ElTooltip>
       </ElButtonGroup>
+      <div v-if="trajectory.pointCount > 0" class="trajectory-status" aria-live="polite">
+        TCP 轨迹 {{ trajectory.pointCount }} 点
+      </div>
       <div class="axis-legend" aria-hidden="true">
         <i class="z" /> <b>Z</b><i class="y" /> <b>Y</b><i class="x" /> <b>X</b>
       </div>
@@ -185,6 +259,19 @@ function toggleGrid() {
 }
 .scene-notice.error {
   color: var(--red-600);
+}
+.trajectory-status {
+  position: absolute;
+  z-index: 2;
+  right: 14px;
+  bottom: 14px;
+  padding: 5px 9px;
+  border: 1px solid rgb(117 145 169 / 55%);
+  border-radius: var(--radius-sm);
+  color: var(--ink-700);
+  background: rgb(255 255 255 / 88%);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .spinner {
   width: 18px;

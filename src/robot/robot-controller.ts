@@ -75,6 +75,23 @@ export class RobotController {
     return true
   }
 
+  teachJointPosition(jointId: string, position: number) {
+    const joint = this.store.findJoint(jointId)
+    if (
+      !joint ||
+      !this.store.modelLoaded ||
+      this.store.motionState === 'running' ||
+      this.store.motionState === 'paused'
+    ) {
+      return false
+    }
+    if (!isTargetWithinLimits(position, joint.min, joint.max)) return false
+
+    this.store.selectedJointId = jointId
+    this.store.safetyState = 'normal'
+    return this.simulator.setJointPosition(jointId, position)
+  }
+
   jogJoint(jointId: string, internalDelta: number) {
     const joint = this.store.findJoint(jointId)
     if (!joint) return

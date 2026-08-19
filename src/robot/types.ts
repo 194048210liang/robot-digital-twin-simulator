@@ -37,6 +37,12 @@ export interface TcpPose {
   rz: number
 }
 
+export interface TcpState {
+  pose: TcpPose
+  sourceLink: string
+  timestamp: number
+}
+
 export interface RobotLog {
   id: number
   time: string
