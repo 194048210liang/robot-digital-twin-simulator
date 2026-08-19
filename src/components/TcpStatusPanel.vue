@@ -1,34 +1,72 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { TableColumnCtx } from 'element-plus'
 import { jointGroupLabels, toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
 import type { JointGroup, JointState } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
+
+interface JointTableRow {
+  joint: JointState
+  group: JointGroup
+  groupLabel: string
+  showGroup: boolean
+  span: number
+}
+
+interface SpanMethodProps {
+  row: JointTableRow
+  column: TableColumnCtx<JointTableRow>
+  rowIndex: number
+  columnIndex: number
+}
 
 const store = useRobotStore()
 const controller = useRobotController()
 const groups: JointGroup[] = ['torso', 'arm', 'head', 'gripper']
 const selected = computed(() => store.selectedJoint)
 
-const rows = computed(() =>
-  groups.flatMap((group) =>
-    store.joints
-      .filter((joint) => joint.group === group)
-      .map((joint, index) => ({
-        joint,
-        group,
-        showGroup: index === 0,
-        span: store.joints.filter((item) => item.group === group).length,
-      })),
-  ),
+const rows = computed<JointTableRow[]>(() =>
+  groups.flatMap((group) => {
+    const joints = store.joints.filter((joint) => joint.group === group)
+    return joints.map((joint, index) => ({
+      joint,
+      group,
+      groupLabel: jointGroupLabels[group],
+      showGroup: index === 0,
+      span: joints.length,
+    }))
+  }),
 )
 
 function display(joint: JointState, value: number) {
   return toDisplayValue(joint, value).toFixed(joint.displayDecimals)
 }
 
-function setFromDisplay(joint: JointState, value: number) {
+function setFromDisplay(joint: JointState, value: number | undefined) {
+  if (value === undefined) return
   controller.setJointTarget(joint.id, toInternalValue(joint, value))
+}
+
+function setJointTarget(joint: JointState, value: number | number[]) {
+  if (typeof value === 'number') controller.setJointTarget(joint.id, value)
+}
+
+function setSpeedScale(value: number | number[]) {
+  if (typeof value === 'number') controller.setSpeedScale(value)
+}
+
+function selectJoint(row: JointTableRow) {
+  store.selectedJointId = row.joint.id
+}
+
+function rowKey(row: JointTableRow) {
+  return row.joint.id
+}
+
+function spanMethod({ row, columnIndex }: SpanMethodProps) {
+  if (columnIndex !== 0) return [1, 1]
+  return row.showGroup ? [row.span, 1] : [0, 0]
 }
 </script>
 
@@ -51,85 +89,104 @@ function setFromDisplay(joint: JointState, value: number) {
     <section class="status-card">
       <h3>关节状态</h3>
       <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>分组</th>
-              <th>关节名称</th>
-              <th>当前值</th>
-              <th>目标值</th>
-              <th>速度</th>
-              <th>限位状态</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in rows"
-              :key="row.joint.id"
-              :class="{ selected: store.selectedJointId === row.joint.id }"
-              @click="store.selectedJointId = row.joint.id"
-            >
-              <td v-if="row.showGroup" :rowspan="row.span" class="group-cell">
-                {{ jointGroupLabels[row.group] }}
-              </td>
-              <td>{{ row.joint.displayName }}</td>
-              <td>{{ display(row.joint, row.joint.current) }} {{ row.joint.displayUnit }}</td>
-              <td>{{ display(row.joint, row.joint.target) }} {{ row.joint.displayUnit }}</td>
-              <td>{{ Math.abs(toDisplayValue(row.joint, row.joint.velocity)).toFixed(2) }}</td>
-              <td class="normal">正常</td>
-            </tr>
-          </tbody>
-        </table>
+        <ElTable
+          class="joint-status-table"
+          :data="rows"
+          :row-key="rowKey"
+          :current-row-key="store.selectedJointId"
+          :span-method="spanMethod"
+          border
+          highlight-current-row
+          size="small"
+          height="100%"
+          @row-click="selectJoint"
+        >
+          <ElTableColumn label="分组" width="70" align="center">
+            <template #default="{ row }">
+              <span class="group-cell">{{ row.groupLabel }}</span>
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="关节名称" min-width="128" align="center">
+            <template #default="{ row }">{{ row.joint.displayName }}</template>
+          </ElTableColumn>
+          <ElTableColumn label="当前值" min-width="104" align="center">
+            <template #default="{ row }">
+              {{ display(row.joint, row.joint.current) }} {{ row.joint.displayUnit }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="目标值" min-width="104" align="center">
+            <template #default="{ row }">
+              {{ display(row.joint, row.joint.target) }} {{ row.joint.displayUnit }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="速度" width="72" align="center">
+            <template #default="{ row }">
+              {{ Math.abs(toDisplayValue(row.joint, row.joint.velocity)).toFixed(2) }}
+            </template>
+          </ElTableColumn>
+          <ElTableColumn label="限位状态" width="82" align="center">
+            <template #default><span class="normal">正常</span></template>
+          </ElTableColumn>
+        </ElTable>
       </div>
     </section>
 
     <section v-if="selected" class="quick-control">
       <div>
-        <strong>{{ selected.displayName }}</strong
-        ><small>目标值</small>
+        <strong>{{ selected.displayName }}</strong>
+        <small>目标值</small>
       </div>
-      <button
+      <ElButton
+        class="jog-button"
         aria-label="减小目标值"
         @click="controller.jogJoint(selected.id, -1 / selected.displayScale)"
       >
         −
-      </button>
-      <input
-        type="range"
+      </ElButton>
+      <ElSlider
+        size="small"
+        :model-value="selected.target"
         :min="selected.min"
         :max="selected.max"
         :step="selected.kind === 'prismatic' || selected.kind === 'virtual' ? 0.001 : 0.01"
-        :value="selected.target"
-        @input="
-          controller.setJointTarget(selected.id, Number(($event.target as HTMLInputElement).value))
-        "
+        :show-tooltip="false"
+        :aria-label="`${selected.displayName} 目标值`"
+        @input="setJointTarget(selected, $event)"
       />
-      <button
+      <ElButton
+        class="jog-button"
         aria-label="增大目标值"
         @click="controller.jogJoint(selected.id, 1 / selected.displayScale)"
       >
         ＋
-      </button>
-      <label
-        ><span>目标</span
-        ><input
-          type="number"
-          :value="display(selected, selected.target)"
-          @change="setFromDisplay(selected, Number(($event.target as HTMLInputElement).value))"
-      /></label>
+      </ElButton>
+      <label>
+        <span>目标</span>
+        <ElInputNumber
+          size="small"
+          :model-value="Number(display(selected, selected.target))"
+          :min="Number(display(selected, selected.min))"
+          :max="Number(display(selected, selected.max))"
+          :precision="selected.displayDecimals"
+          :controls="false"
+          :aria-label="`${selected.displayName} 目标数值`"
+          @change="setFromDisplay(selected, $event)"
+        />
+      </label>
       <label class="speed-input">
         <span>速度 ({{ selected.displayUnit }}/s)</span>
         <strong>{{
           Math.abs(toDisplayValue(selected, selected.maxVelocity * store.speedScale)).toFixed(1)
         }}</strong>
-        <input
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.05"
-          :value="store.speedScale"
+        <ElSlider
+          size="small"
+          :model-value="store.speedScale"
+          :min="0.1"
+          :max="1"
+          :step="0.05"
+          :show-tooltip="false"
           aria-label="速度倍率"
-          @input="controller.setSpeedScale(Number(($event.target as HTMLInputElement).value))"
+          @input="setSpeedScale"
         />
       </label>
     </section>
@@ -164,8 +221,8 @@ function setFromDisplay(joint: JointState, value: number) {
   min-height: 0;
   display: grid;
   grid-template-rows: 90px minmax(0, 1fr) 70px 66px;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
   overflow: hidden;
   background: #f6f8fa;
 }
@@ -181,7 +238,7 @@ h3 {
   display: flex;
   align-items: center;
   margin: 0;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line-200);
   font-size: 14px;
 }
@@ -213,42 +270,27 @@ h3 {
 }
 .table-scroll {
   height: calc(100% - 30px);
-  overflow: auto;
-  scrollbar-width: thin;
+  overflow: hidden;
 }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
+.joint-status-table {
+  --el-table-row-hover-bg-color: #f4f8ff;
+  --el-table-current-row-bg-color: #eaf2ff;
 }
-th,
-td {
+.joint-status-table :deep(.el-table__cell) {
   height: 18px;
-  padding: 1px 7px;
-  border-right: 1px solid var(--line-200);
-  border-bottom: 1px solid var(--line-200);
-  text-align: center;
+  padding: 0 !important;
+}
+.joint-status-table :deep(.cell) {
+  padding: 0 6px;
+  overflow: hidden;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
 }
-th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #f4f6f8;
-  font-weight: 600;
-}
-tbody tr {
-  cursor: pointer;
-}
-tbody tr:hover,
-tbody tr.selected {
-  color: var(--blue-700);
-  background: #eaf2ff;
-}
 .group-cell {
   color: var(--ink-700);
-  background: #fafbfd;
 }
 .normal {
   color: var(--green-600);
@@ -261,7 +303,7 @@ tbody tr.selected {
   gap: 10px;
   padding: 8px 12px;
 }
-.quick-control div {
+.quick-control > div {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -271,28 +313,28 @@ tbody tr.selected {
   color: var(--ink-500);
   font-size: 11px;
 }
-.quick-control button {
+.quick-control :deep(.jog-button) {
+  width: 34px;
   height: 34px;
-  border: 1px solid var(--line-300);
-  border-radius: 3px;
-  background: #fff;
-  cursor: pointer;
+  padding: 0;
 }
-.quick-control input[type='range'] {
+.quick-control :deep(.el-slider) {
+  min-width: 0;
   width: 100%;
-  accent-color: var(--blue-600);
+}
+.quick-control > :deep(.el-slider) {
+  align-self: center;
+}
+.quick-control :deep(.el-slider__runway) {
+  width: 100%;
 }
 .quick-control label {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.quick-control label input {
+.quick-control label :deep(.el-input-number) {
   width: 100%;
-  height: 28px;
-  border: 1px solid var(--line-300);
-  border-radius: 3px;
-  padding: 0 8px;
 }
 .quick-control .speed-input {
   display: grid;
@@ -306,11 +348,8 @@ tbody tr.selected {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
-.quick-control .speed-input input {
-  height: auto;
-  padding: 0;
-  border: 0;
-  accent-color: var(--blue-600);
+.quick-control .speed-input :deep(.el-slider) {
+  height: 20px;
 }
 .controller-card dl {
   height: calc(100% - 30px);

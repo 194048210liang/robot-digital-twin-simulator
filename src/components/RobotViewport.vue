@@ -85,28 +85,37 @@ function toggleGrid() {
       <div v-if="store.modelError" class="scene-notice error">
         模型加载失败：{{ store.modelError }}
       </div>
-      <div class="viewport-tools" role="toolbar" aria-label="三维视图工具">
-        <button title="适配模型" aria-label="适配模型" @click="scene?.fitCamera()">
-          <FontAwesomeIcon :icon="faHouse" />
-        </button>
-        <button title="全屏" aria-label="全屏" @click="scene?.requestFullscreen()">
-          <FontAwesomeIcon :icon="faCompress" />
-        </button>
-        <button
-          :class="{ active: autoRotating }"
-          title="自动旋转"
-          aria-label="自动旋转"
-          @click="toggleAutoRotate"
-        >
-          <FontAwesomeIcon :icon="faRotate" />
-        </button>
-        <button :class="{ active: gridVisible }" title="网格" aria-label="网格" @click="toggleGrid">
-          <FontAwesomeIcon :icon="faTableCellsLarge" />
-        </button>
-        <button title="保存截图" aria-label="保存截图" @click="scene?.downloadScreenshot()">
-          <FontAwesomeIcon :icon="faCamera" />
-        </button>
-      </div>
+      <ElButtonGroup class="viewport-tools" role="toolbar" aria-label="三维视图工具">
+        <ElTooltip content="适配模型" placement="bottom">
+          <ElButton aria-label="适配模型" @click="scene?.fitCamera()">
+            <FontAwesomeIcon :icon="faHouse" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="全屏" placement="bottom">
+          <ElButton aria-label="全屏" @click="scene?.requestFullscreen()">
+            <FontAwesomeIcon :icon="faCompress" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="自动旋转" placement="bottom">
+          <ElButton
+            :class="{ active: autoRotating }"
+            aria-label="自动旋转"
+            @click="toggleAutoRotate"
+          >
+            <FontAwesomeIcon :icon="faRotate" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="显示网格" placement="bottom">
+          <ElButton :class="{ active: gridVisible }" aria-label="显示网格" @click="toggleGrid">
+            <FontAwesomeIcon :icon="faTableCellsLarge" />
+          </ElButton>
+        </ElTooltip>
+        <ElTooltip content="保存截图" placement="bottom">
+          <ElButton aria-label="保存截图" @click="scene?.downloadScreenshot()">
+            <FontAwesomeIcon :icon="faCamera" />
+          </ElButton>
+        </ElTooltip>
+      </ElButtonGroup>
       <div class="axis-legend" aria-hidden="true">
         <i class="z" /> <b>Z</b><i class="y" /> <b>Y</b><i class="x" /> <b>X</b>
       </div>
@@ -123,7 +132,7 @@ function toggleGrid() {
   height: 38px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--line-200);
   background: #fbfcfd;
 }
@@ -137,7 +146,7 @@ function toggleGrid() {
   height: calc(100% - 38px);
   min-height: 0;
   overflow: hidden;
-  background: radial-gradient(circle at 48% 36%, #fff 0, #f8fafc 58%, #edf2f6 100%);
+  background: #e2e8ee;
 }
 .scene-host :deep(canvas) {
   display: block;
@@ -147,27 +156,19 @@ function toggleGrid() {
 .viewport-tools {
   position: absolute;
   z-index: 2;
-  top: 12px;
-  right: 12px;
-  display: flex;
-  border: 1px solid var(--line-300);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  top: 14px;
+  right: 14px;
   box-shadow: 0 1px 4px rgb(25 42 60 / 8%);
 }
-.viewport-tools button {
+.viewport-tools :deep(.el-button) {
   width: 38px;
   height: 36px;
-  border: 0;
-  border-right: 1px solid var(--line-200);
+  padding: 0;
   background: rgb(255 255 255 / 94%);
-  cursor: pointer;
 }
-.viewport-tools button:last-child {
-  border-right: 0;
-}
-.viewport-tools button:hover,
-.viewport-tools button.active {
+.viewport-tools :deep(.el-button:hover),
+.viewport-tools :deep(.el-button.active) {
+  border-color: var(--blue-600);
   color: var(--blue-700);
   background: var(--blue-100);
 }

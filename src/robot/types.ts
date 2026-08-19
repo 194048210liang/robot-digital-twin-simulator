@@ -55,6 +55,7 @@ export type RobotCommand =
   | { type: 'SET_JOINT_TARGET'; jointId: string; target: number }
   | { type: 'RUN' }
   | { type: 'PAUSE' }
+  | { type: 'RESUME' }
   | { type: 'STOP' }
   | { type: 'HOME' }
   | { type: 'SET_SPEED_SCALE'; scale: number }

@@ -16,9 +16,17 @@ function display(joint: JointState, value: number) {
   return toDisplayValue(joint, value).toFixed(joint.displayDecimals)
 }
 
-function setFromDisplay(joint: JointState, event: Event) {
-  const value = Number((event.target as HTMLInputElement).value)
+function setFromDisplay(joint: JointState, value: number | undefined) {
+  if (value === undefined) return
   controller.setJointTarget(joint.id, toInternalValue(joint, value))
+}
+
+function setJointTarget(joint: JointState, value: number | number[]) {
+  if (typeof value === 'number') controller.setJointTarget(joint.id, value)
+}
+
+function setSpeedScale(value: number | number[]) {
+  if (typeof value === 'number') controller.setSpeedScale(value)
 }
 </script>
 
@@ -30,39 +38,41 @@ function setFromDisplay(joint: JointState, event: Event) {
     <div class="joint-scroll">
       <template v-for="section in grouped" :key="section.group">
         <div class="group-row">{{ jointGroupLabels[section.group] }}</div>
-        <button
+        <div
           v-for="joint in section.joints"
           :key="joint.id"
           class="joint-row"
           :class="{ selected: store.selectedJointId === joint.id }"
+          role="button"
+          tabindex="0"
           @click="store.selectedJointId = joint.id"
+          @keydown.enter="store.selectedJointId = joint.id"
         >
           <span class="name">{{ joint.displayName }}</span>
           <span class="current">{{ display(joint, joint.current) }}</span>
           <span class="target-control">
-            <input
+            <ElSlider
               class="range"
-              type="range"
+              size="small"
+              :model-value="joint.target"
               :min="joint.min"
               :max="joint.max"
               :step="joint.kind === 'prismatic' || joint.kind === 'virtual' ? 0.001 : 0.01"
-              :value="joint.target"
+              :show-tooltip="false"
               :aria-label="`${joint.displayName} 目标值`"
-              @input="
-                controller.setJointTarget(
-                  joint.id,
-                  Number(($event.target as HTMLInputElement).value),
-                )
-              "
+              @input="setJointTarget(joint, $event)"
               @click.stop
             />
             <label class="number-wrap" @click.stop>
-              <input
-                type="number"
-                :min="display(joint, joint.min)"
-                :max="display(joint, joint.max)"
+              <ElInputNumber
+                size="small"
+                :model-value="Number(display(joint, joint.target))"
+                :min="Number(display(joint, joint.min))"
+                :max="Number(display(joint, joint.max))"
                 :step="joint.displayDecimals === 1 ? 0.1 : 0.01"
-                :value="display(joint, joint.target)"
+                :precision="joint.displayDecimals"
+                :controls="false"
+                :aria-label="`${joint.displayName} 目标数值`"
                 @change="setFromDisplay(joint, $event)"
               />
               <small>{{ joint.displayUnit }}</small>
@@ -70,20 +80,21 @@ function setFromDisplay(joint: JointState, event: Event) {
           </span>
           <span class="limit">{{ display(joint, joint.min) }}</span>
           <span class="limit">{{ display(joint, joint.max) }}</span>
-        </button>
+        </div>
       </template>
     </div>
     <div class="panel-summary">
       <div class="speed-control">
         <strong>速度倍率</strong>
-        <input
-          type="range"
-          min="0.1"
-          max="1"
-          step="0.05"
-          :value="store.speedScale"
+        <ElSlider
+          size="small"
+          :model-value="store.speedScale"
+          :min="0.1"
+          :max="1"
+          :step="0.05"
+          :show-tooltip="false"
           aria-label="速度倍率"
-          @input="controller.setSpeedScale(Number(($event.target as HTMLInputElement).value))"
+          @input="setSpeedScale"
         />
         <span>{{ Math.round(store.speedScale * 100) }}%</span>
       </div>
@@ -134,7 +145,7 @@ function setFromDisplay(joint: JointState, event: Event) {
   align-items: center;
 }
 .joint-head {
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line-300);
   color: var(--ink-700);
   font-weight: 600;
@@ -152,7 +163,7 @@ function setFromDisplay(joint: JointState, event: Event) {
   height: 22px;
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line-200);
   background: #f2f5f8;
   font-size: 12px;
@@ -161,7 +172,7 @@ function setFromDisplay(joint: JointState, event: Event) {
 .joint-row {
   width: 100%;
   min-height: 28px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-bottom: 1px solid #e4e9ef;
   background: #fff;
@@ -185,9 +196,6 @@ function setFromDisplay(joint: JointState, event: Event) {
 .range {
   min-width: 0;
   width: 100%;
-  margin: 0;
-  accent-color: var(--blue-600);
-  vertical-align: middle;
 }
 .target-control {
   display: grid;
@@ -199,12 +207,14 @@ function setFromDisplay(joint: JointState, event: Event) {
   position: relative;
   width: 82px;
 }
-.number-wrap input {
+.number-wrap :deep(.el-input-number) {
   width: 100%;
-  height: 24px;
-  padding: 0 23px 0 7px;
-  border: 1px solid var(--line-300);
-  border-radius: 3px;
+}
+.number-wrap :deep(.el-input__wrapper) {
+  min-height: 24px;
+  padding: 0 22px 0 7px;
+}
+.number-wrap :deep(.el-input__inner) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -222,20 +232,27 @@ function setFromDisplay(joint: JointState, event: Event) {
 }
 .speed-control {
   display: grid;
-  grid-template-columns: auto 1fr 44px;
+  grid-template-columns: minmax(120px, 1fr) 44px;
   gap: 12px;
   align-items: center;
-  padding: 12px;
+  padding: 12px 14px;
   border-right: 1px solid var(--line-200);
 }
 .speed-control strong {
   grid-column: 1 / -1;
 }
-.speed-control input {
-  accent-color: var(--blue-600);
+.target-control :deep(.el-slider),
+.speed-control :deep(.el-slider) {
+  min-width: 0;
+  width: 100%;
+  height: 22px;
+}
+.target-control :deep(.el-slider__runway),
+.speed-control :deep(.el-slider__runway) {
+  margin: 9px 0;
 }
 .tcp-mini {
-  padding: 8px 14px;
+  padding: 8px 16px;
 }
 .tcp-mini strong {
   display: block;

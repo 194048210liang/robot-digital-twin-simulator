@@ -55,7 +55,7 @@ const motionLabel = computed(() => {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 20px;
+  padding: 0 18px;
   border-right: 1px solid var(--line-200);
   white-space: nowrap;
 }
@@ -77,7 +77,7 @@ const motionLabel = computed(() => {
   min-width: 150px;
 }
 .clock {
-  padding: 0 23px;
+  padding: 0 20px;
   color: var(--ink-700);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

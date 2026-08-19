@@ -23,7 +23,7 @@ export class RobotScene {
     preserveDrawingBuffer: true,
   })
   private readonly controls: OrbitControls
-  private readonly grid = new THREE.GridHelper(8, 48, 0x9eb5c9, 0xdce4eb)
+  private readonly grid = new THREE.GridHelper(8, 48, 0x879caf, 0xbac7d2)
   private readonly axes = new THREE.AxesHelper(0.28)
   private readonly resizeObserver: ResizeObserver
   private robot: URDFRobot | null = null
@@ -37,7 +37,7 @@ export class RobotScene {
     private readonly container: HTMLElement,
     private readonly callbacks: RobotSceneCallbacks,
   ) {
-    this.scene.background = new THREE.Color(0xf8fafc)
+    this.scene.background = new THREE.Color(0xe2e8ee)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.shadowMap.enabled = true
@@ -71,7 +71,7 @@ export class RobotScene {
     this.scene.add(fillLight)
 
     this.grid.material.transparent = true
-    this.grid.material.opacity = 0.72
+    this.grid.material.opacity = 0.68
     this.grid.position.y = 0
     this.scene.add(this.grid)
 

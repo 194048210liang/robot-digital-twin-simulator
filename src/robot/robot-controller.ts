@@ -89,23 +89,30 @@ export class RobotController {
     void this.send({ type: 'SET_SPEED_SCALE', scale: this.store.speedScale }, '速度倍率已更新')
   }
 
-  run() {
+  async execute() {
     if (!this.ensureReady()) return
+    if (this.store.motionState === 'running' || this.store.motionState === 'paused') return
     this.store.motionState = 'running'
     this.simulator.markMotionStarted()
-    void this.send({ type: 'RUN' }, '开始执行关节目标')
+    await this.send({ type: 'RUN' }, '开始执行关节目标')
   }
 
-  pause() {
+  async pause() {
     if (this.store.motionState !== 'running') return
     this.store.motionState = 'paused'
-    void this.send({ type: 'PAUSE' }, '仿真运动已暂停')
+    await this.send({ type: 'PAUSE' }, '仿真运动已暂停')
   }
 
-  stop() {
+  async resume() {
+    if (this.store.motionState !== 'paused') return
+    this.store.motionState = 'running'
+    await this.send({ type: 'RESUME' }, '继续执行未完成目标')
+  }
+
+  async stop() {
     this.simulator.stopMotion()
     this.store.motionState = 'stopped'
-    void this.send({ type: 'STOP' }, '仿真运动已停止')
+    await this.send({ type: 'STOP' }, '仿真运动已停止')
   }
 
   home() {

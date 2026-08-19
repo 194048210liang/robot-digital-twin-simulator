@@ -22,4 +22,27 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --font-ui: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+
+  --el-color-primary: var(--blue-600);
+  --el-color-primary-light-3: #438ce5;
+  --el-color-primary-light-5: #75aaec;
+  --el-color-primary-light-7: #aecdf4;
+  --el-color-primary-light-8: #cee0f8;
+  --el-color-primary-light-9: #edf5ff;
+  --el-color-danger: var(--red-600);
+  --el-color-success: var(--green-600);
+  --el-color-warning: var(--amber-600);
+  --el-border-color: var(--line-300);
+  --el-border-color-light: var(--line-200);
+  --el-border-color-lighter: #e8edf2;
+  --el-fill-color-light: #f3f6f9;
+  --el-fill-color-lighter: #f8fafc;
+  --el-fill-color-blank: #fff;
+  --el-text-color-primary: var(--ink-900);
+  --el-text-color-regular: var(--ink-700);
+  --el-text-color-secondary: var(--ink-500);
+  --el-border-radius-base: 3px;
+  --el-border-radius-small: 2px;
+  --el-font-family: var(--font-ui);
+  --el-font-size-base: 13px;
 }
