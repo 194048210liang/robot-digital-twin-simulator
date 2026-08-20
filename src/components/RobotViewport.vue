@@ -209,22 +209,89 @@ async function importLocalModel(event: Event) {
         webkitdirectory
         @change="importLocalModel"
       />
-      <ElDropdown trigger="click" @command="chooseImportSource">
-        <ElButton
-          size="small"
-          :loading="modelLoading"
-          :disabled="store.motionState === 'running' || store.motionState === 'paused'"
-        >
-          <FontAwesomeIcon :icon="faFolderOpen" />
-          {{ t('robot.importUrdf') }}
-        </ElButton>
-        <template #dropdown>
-          <ElDropdownMenu>
-            <ElDropdownItem command="files">{{ t('robot.chooseUrdfFiles') }}</ElDropdownItem>
-            <ElDropdownItem command="folder">{{ t('robot.chooseModelFolder') }}</ElDropdownItem>
-          </ElDropdownMenu>
-        </template>
-      </ElDropdown>
+      <div class="viewport-actions">
+        <ElButtonGroup class="viewport-tools" role="toolbar" :aria-label="t('robot.viewportAria')">
+          <ElTooltip :content="t('robot.fitModel')" placement="bottom">
+            <ElButton :aria-label="t('robot.fitModel')" @click="scene?.fitCamera()">
+              <FontAwesomeIcon :icon="faHouse" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.fullscreen')" placement="bottom">
+            <ElButton :aria-label="t('robot.fullscreen')" @click="scene?.requestFullscreen()">
+              <FontAwesomeIcon :icon="faCompress" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.autoRotate')" placement="bottom">
+            <ElButton
+              :class="{ active: autoRotating }"
+              :aria-label="t('robot.autoRotate')"
+              @click="toggleAutoRotate"
+            >
+              <FontAwesomeIcon :icon="faRotate" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.showGrid')" placement="bottom">
+            <ElButton
+              :class="{ active: gridVisible }"
+              :aria-label="t('robot.showGrid')"
+              @click="toggleGrid"
+            >
+              <FontAwesomeIcon :icon="faTableCellsLarge" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.tcpFrame')" placement="bottom">
+            <ElButton
+              :class="{ active: trajectory.tcpFrameVisible }"
+              :aria-pressed="trajectory.tcpFrameVisible"
+              :aria-label="t('robot.tcpFrame')"
+              @click="trajectory.toggleTcpFrame()"
+            >
+              <FontAwesomeIcon :icon="faCrosshairs" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.motionTrajectory')" placement="bottom">
+            <ElButton
+              :class="{ active: trajectory.trajectoryVisible }"
+              :aria-pressed="trajectory.trajectoryVisible"
+              :aria-label="t('robot.motionTrajectory')"
+              @click="trajectory.toggleTrajectory()"
+            >
+              <FontAwesomeIcon :icon="faRoute" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.clearTrajectory')" placement="bottom">
+            <ElButton
+              :aria-label="t('robot.clearTrajectory')"
+              :disabled="trajectory.pointCount === 0"
+              @click="clearTrajectory"
+            >
+              <FontAwesomeIcon :icon="faEraser" />
+            </ElButton>
+          </ElTooltip>
+          <ElTooltip :content="t('robot.saveScreenshot')" placement="bottom">
+            <ElButton :aria-label="t('robot.saveScreenshot')" @click="scene?.downloadScreenshot()">
+              <FontAwesomeIcon :icon="faCamera" />
+            </ElButton>
+          </ElTooltip>
+        </ElButtonGroup>
+        <ElDropdown trigger="click" @command="chooseImportSource">
+          <ElButton
+            class="model-import-button"
+            size="small"
+            :loading="modelLoading"
+            :disabled="store.motionState === 'running' || store.motionState === 'paused'"
+          >
+            <FontAwesomeIcon :icon="faFolderOpen" />
+            {{ t('robot.importUrdf') }}
+          </ElButton>
+          <template #dropdown>
+            <ElDropdownMenu>
+              <ElDropdownItem command="files">{{ t('robot.chooseUrdfFiles') }}</ElDropdownItem>
+              <ElDropdownItem command="folder">{{ t('robot.chooseModelFolder') }}</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
+      </div>
     </header>
     <div ref="container" class="scene-host">
       <div v-if="!store.modelLoaded && !store.modelError" class="scene-notice">
@@ -239,70 +306,6 @@ async function importLocalModel(event: Event) {
           })
         }}
       </div>
-      <ElButtonGroup class="viewport-tools" role="toolbar" :aria-label="t('robot.viewportAria')">
-        <ElTooltip :content="t('robot.fitModel')" placement="bottom">
-          <ElButton :aria-label="t('robot.fitModel')" @click="scene?.fitCamera()">
-            <FontAwesomeIcon :icon="faHouse" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.fullscreen')" placement="bottom">
-          <ElButton :aria-label="t('robot.fullscreen')" @click="scene?.requestFullscreen()">
-            <FontAwesomeIcon :icon="faCompress" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.autoRotate')" placement="bottom">
-          <ElButton
-            :class="{ active: autoRotating }"
-            :aria-label="t('robot.autoRotate')"
-            @click="toggleAutoRotate"
-          >
-            <FontAwesomeIcon :icon="faRotate" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.showGrid')" placement="bottom">
-          <ElButton
-            :class="{ active: gridVisible }"
-            :aria-label="t('robot.showGrid')"
-            @click="toggleGrid"
-          >
-            <FontAwesomeIcon :icon="faTableCellsLarge" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.tcpFrame')" placement="bottom">
-          <ElButton
-            :class="{ active: trajectory.tcpFrameVisible }"
-            :aria-pressed="trajectory.tcpFrameVisible"
-            :aria-label="t('robot.tcpFrame')"
-            @click="trajectory.toggleTcpFrame()"
-          >
-            <FontAwesomeIcon :icon="faCrosshairs" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.motionTrajectory')" placement="bottom">
-          <ElButton
-            :class="{ active: trajectory.trajectoryVisible }"
-            :aria-pressed="trajectory.trajectoryVisible"
-            :aria-label="t('robot.motionTrajectory')"
-            @click="trajectory.toggleTrajectory()"
-          >
-            <FontAwesomeIcon :icon="faRoute" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.clearTrajectory')" placement="bottom">
-          <ElButton
-            :aria-label="t('robot.clearTrajectory')"
-            :disabled="trajectory.pointCount === 0"
-            @click="clearTrajectory"
-          >
-            <FontAwesomeIcon :icon="faEraser" />
-          </ElButton>
-        </ElTooltip>
-        <ElTooltip :content="t('robot.saveScreenshot')" placement="bottom">
-          <ElButton :aria-label="t('robot.saveScreenshot')" @click="scene?.downloadScreenshot()">
-            <FontAwesomeIcon :icon="faCamera" />
-          </ElButton>
-        </ElTooltip>
-      </ElButtonGroup>
       <div v-if="trajectory.pointCount > 0" class="trajectory-status" aria-live="polite">
         {{ t('robot.trajectoryPoints', { count: trajectory.pointCount }) }}
       </div>
@@ -338,6 +341,12 @@ async function importLocalModel(event: Event) {
   font-size: 16px;
   font-weight: 650;
 }
+.viewport-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .scene-host {
   position: relative;
   height: calc(100% - 38px);
@@ -351,23 +360,49 @@ async function importLocalModel(event: Event) {
   height: 100%;
 }
 .viewport-tools {
-  position: absolute;
-  z-index: 2;
-  top: 14px;
-  right: 14px;
-  box-shadow: 0 1px 4px rgb(25 42 60 / 8%);
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
 }
 .viewport-tools :deep(.el-button) {
-  width: 38px;
-  height: 36px;
+  width: 27px;
+  height: 24px;
+  margin: 0 !important;
   padding: 0;
-  background: rgb(255 255 255 / 94%);
+  border: 0 !important;
+  border-radius: 3px !important;
+  color: var(--ink-600);
+  background: transparent;
 }
-.viewport-tools :deep(.el-button:hover),
+.viewport-tools :deep(.el-button:hover) {
+  color: var(--ink-900);
+  background: var(--surface-100);
+}
 .viewport-tools :deep(.el-button.active) {
-  border-color: var(--blue-600);
   color: var(--blue-700);
   background: var(--blue-100);
+}
+.viewport-tools :deep(.el-button.is-disabled) {
+  color: var(--line-300);
+  background: transparent;
+}
+.model-import-button {
+  height: 30px;
+  padding: 0 11px;
+  border-color: var(--line-300);
+  border-radius: var(--radius-sm);
+  color: var(--ink-700);
+  background: #fff;
+}
+.model-import-button:hover,
+.model-import-button:focus-visible {
+  border-color: var(--blue-600);
+  color: var(--blue-700);
+  background: var(--el-color-primary-light-9);
 }
 .scene-notice {
   position: absolute;
