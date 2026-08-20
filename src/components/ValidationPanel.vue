@@ -3,30 +3,31 @@ import { computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faCheckCircle, faDownload, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { simulationRecordToCsv } from '@/robot/simulation-validation'
 import { useValidationStore } from '@/stores/validation'
 import { downloadTextFile, sanitizeFileName } from '@/utils/download'
+import type { TranslationDescriptor } from '@/robot/types'
 
 const route = useRoute()
 const router = useRouter()
 const validation = useValidationStore()
+const { locale, t } = useI18n()
 const record = computed(() => validation.selectedRecord)
 const hasTcpTargets = computed(() => Boolean(record.value?.summary.tcpTargetCount))
 
-const statusLabel = computed(() => {
-  const labels = {
-    idle: '未开始',
-    running: '采样中',
-    paused: '已暂停',
-    completed: '已完成',
-    stopped: '已停止',
-    error: '异常',
-  }
-  return record.value ? labels[record.value.status] : '暂无记录'
-})
+function validationText(value: TranslationDescriptor) {
+  return t(value.key, value.params ?? {})
+}
+
+const statusLabel = computed(() =>
+  record.value ? t(`validation.statuses.${record.value.status}`) : t('validation.statuses.none'),
+)
 
 function formatDate(timestamp: number | null) {
-  return timestamp ? new Date(timestamp).toLocaleString('zh-CN', { hour12: false }) : '—'
+  return timestamp
+    ? new Date(timestamp).toLocaleString(locale.value, { hour12: false })
+    : t('common.none')
 }
 
 function formatDuration(milliseconds: number) {
@@ -73,7 +74,7 @@ function goToTasks() {
       <section class="run-overview">
         <header>
           <div>
-            <h3>当前验证结果</h3>
+            <h3>{{ t('validation.currentResult') }}</h3>
             <span>{{ record.taskName }}</span>
           </div>
           <ElSelect
@@ -81,7 +82,7 @@ function goToTasks() {
             :model-value="record.id"
             class="record-select"
             size="small"
-            aria-label="选择验证记录"
+            :aria-label="t('validation.chooseRecord')"
             @change="validation.select"
           >
             <ElOption
@@ -95,28 +96,28 @@ function goToTasks() {
         <div class="overview-grid">
           <dl>
             <div>
-              <dt>完成状态</dt>
+              <dt>{{ t('validation.completionStatus') }}</dt>
               <dd :class="{ pass: record.summary.passed }">{{ statusLabel }}</dd>
             </div>
             <div>
-              <dt>运行时长</dt>
+              <dt>{{ t('validation.duration') }}</dt>
               <dd>{{ formatDuration(record.durationMs) }}</dd>
             </div>
           </dl>
           <dl>
             <div>
-              <dt>采样点数</dt>
+              <dt>{{ t('validation.sampleCount') }}</dt>
               <dd>{{ record.summary.sampleCount }}</dd>
             </div>
             <div>
-              <dt>TCP 路径距离</dt>
+              <dt>{{ t('validation.tcpPathLength') }}</dt>
               <dd>{{ record.summary.tcpPathLength.toFixed(3) }} m</dd>
             </div>
           </dl>
           <dl>
             <template v-if="hasTcpTargets">
               <div>
-                <dt>最大位置误差</dt>
+                <dt>{{ t('validation.maxPositionError') }}</dt>
                 <dd>
                   {{
                     record.summary.maxTcpPositionError === null
@@ -126,7 +127,7 @@ function goToTasks() {
                 </dd>
               </div>
               <div>
-                <dt>最大姿态误差</dt>
+                <dt>{{ t('validation.maxOrientationError') }}</dt>
                 <dd>
                   {{
                     record.summary.maxTcpOrientationError === null
@@ -138,11 +139,11 @@ function goToTasks() {
             </template>
             <template v-else>
               <div>
-                <dt>开始时间</dt>
+                <dt>{{ t('common.startTime') }}</dt>
                 <dd>{{ formatDate(record.startedAt) }}</dd>
               </div>
               <div>
-                <dt>结束时间</dt>
+                <dt>{{ t('common.endTime') }}</dt>
                 <dd>{{ formatDate(record.endedAt) }}</dd>
               </div>
             </template>
@@ -151,17 +152,25 @@ function goToTasks() {
       </section>
 
       <section class="check-list">
-        <h3>验证指标</h3>
+        <h3>{{ t('validation.metrics') }}</h3>
         <ElTable class="adaptive-table" :data="record.checks" border size="small" height="100%">
-          <ElTableColumn prop="name" label="指标名称" min-width="125" />
-          <ElTableColumn prop="description" label="说明" min-width="220" show-overflow-tooltip />
-          <ElTableColumn prop="expected" label="期望" width="110" align="center" />
-          <ElTableColumn prop="actual" label="实测" width="110" align="center" />
-          <ElTableColumn label="结果" width="92" align="center">
+          <ElTableColumn :label="t('validation.metricName')" min-width="125">
+            <template #default="{ row }">{{ validationText(row.name) }}</template>
+          </ElTableColumn>
+          <ElTableColumn :label="t('common.description')" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">{{ validationText(row.description) }}</template>
+          </ElTableColumn>
+          <ElTableColumn :label="t('common.expected')" width="110" align="center">
+            <template #default="{ row }">{{ validationText(row.expected) }}</template>
+          </ElTableColumn>
+          <ElTableColumn :label="t('common.measured')" width="110" align="center">
+            <template #default="{ row }">{{ validationText(row.actual) }}</template>
+          </ElTableColumn>
+          <ElTableColumn :label="t('common.result')" width="92" align="center">
             <template #default="{ row }">
               <span :class="row.passed ? 'pass' : 'fail'">
                 <FontAwesomeIcon :icon="row.passed ? faCheckCircle : faTriangleExclamation" />
-                {{ row.passed ? '通过' : '未通过' }}
+                {{ row.passed ? t('validation.pass') : t('validation.failed') }}
               </span>
             </template>
           </ElTableColumn>
@@ -170,21 +179,21 @@ function goToTasks() {
 
       <section class="export-bar">
         <div>
-          <strong>验证数据输出</strong>
-          <span>JSON 含目标/实际 TCP 与验证结论；CSV 为逐时刻关节、TCP 和跟踪误差。</span>
+          <strong>{{ t('validation.output') }}</strong>
+          <span>{{ t('validation.outputDescription') }}</span>
         </div>
         <ElButton :disabled="validation.isRecording" @click="exportJson">
-          <FontAwesomeIcon :icon="faDownload" />导出 JSON
+          <FontAwesomeIcon :icon="faDownload" />{{ t('validation.exportJson') }}
         </ElButton>
         <ElButton type="primary" plain :disabled="validation.isRecording" @click="exportCsv">
-          <FontAwesomeIcon :icon="faDownload" />导出 CSV
+          <FontAwesomeIcon :icon="faDownload" />{{ t('validation.exportCsv') }}
         </ElButton>
       </section>
     </template>
 
-    <ElEmpty v-else description="尚无验证记录">
-      <p>先在任务编排中播放一个任务，系统会自动采集关节与 TCP 数据。</p>
-      <ElButton type="primary" plain @click="goToTasks">前往任务编排</ElButton>
+    <ElEmpty v-else :description="t('validation.noRecord')">
+      <p>{{ t('validation.emptyHint') }}</p>
+      <ElButton type="primary" plain @click="goToTasks">{{ t('task.goToTasks') }}</ElButton>
     </ElEmpty>
   </div>
 </template>

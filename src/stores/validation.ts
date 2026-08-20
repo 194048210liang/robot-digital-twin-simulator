@@ -56,7 +56,7 @@ export const useValidationStore = defineStore('simulation-validation', () => {
     joints: JointState[],
     tcp: TcpPose,
   ) {
-    if (activeRecord.value) finish('stopped', '新的仿真任务已开始')
+    if (activeRecord.value) finish('stopped')
     const startedAt = Date.now()
     const sample = createSimulationSample(joints, tcp, 0, startedAt, startedAt)
     const validation = buildSimulationValidation(

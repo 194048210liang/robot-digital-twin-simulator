@@ -11,6 +11,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { useRobotController } from '@/robot/controller-context'
 import { useRobotStore } from '@/stores/robot'
+import { useI18n } from 'vue-i18n'
 
 withDefaults(defineProps<{ showExecute?: boolean; showBatchSet?: boolean }>(), {
   showExecute: true,
@@ -20,6 +21,7 @@ const emit = defineEmits<{ batchSet: [] }>()
 
 const controller = useRobotController()
 const store = useRobotStore()
+const { t } = useI18n()
 const executeLoading = ref(false)
 const stopLoading = ref(false)
 const pausePending = ref(false)
@@ -85,7 +87,7 @@ async function stop() {
 
 <template>
   <div class="motion-controls">
-    <ElButtonGroup class="motion-group" role="group" aria-label="运动控制">
+    <ElButtonGroup class="motion-group" role="group" :aria-label="t('robot.motionControl')">
       <ElButton
         v-if="showExecute"
         class="execute-button"
@@ -96,22 +98,22 @@ async function stop() {
         @click="execute"
       >
         <FontAwesomeIcon v-if="!executeLoading" :icon="faPlay" />
-        {{ executeLoading ? '执行中' : '执行' }}
+        {{ executeLoading ? t('robot.executing') : t('robot.execute') }}
       </ElButton>
       <ElButton :disabled="!canPauseOrResume" @click="pauseOrResume">
         <FontAwesomeIcon :icon="store.motionState === 'paused' ? faForward : faPause" />
-        {{ store.motionState === 'paused' ? '继续' : '暂停' }}
+        {{ store.motionState === 'paused' ? t('robot.resume') : t('robot.pause') }}
       </ElButton>
       <ElButton :disabled="!canHome" @click="controller.home()">
-        <FontAwesomeIcon :icon="faHouse" />回到零位
+        <FontAwesomeIcon :icon="faHouse" />{{ t('robot.home') }}
       </ElButton>
       <ElButton v-if="showBatchSet" :disabled="!canHome" @click="emit('batchSet')">
-        <FontAwesomeIcon :icon="faSliders" />批量设置
+        <FontAwesomeIcon :icon="faSliders" />{{ t('joint.batchSet') }}
       </ElButton>
     </ElButtonGroup>
     <ElButton class="danger" type="danger" plain :loading="stopLoading" @click="stop">
       <FontAwesomeIcon v-if="!stopLoading" :icon="faStop" />
-      {{ stopLoading ? '停止中' : '仿真停止' }}
+      {{ stopLoading ? t('robot.stopping') : t('robot.simulationStop') }}
     </ElButton>
   </div>
 </template>

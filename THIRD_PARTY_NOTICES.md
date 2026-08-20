@@ -1,14 +1,16 @@
-# Third-party notices
+# 第三方资源说明
 
-## Robot model assets
+[简体中文](./THIRD_PARTY_NOTICES.md) | [English](./THIRD_PARTY_NOTICES.en.md)
 
-`robot_urdf/robot/` was supplied as an existing model asset set and appears to describe a Fetch mobile manipulator. Its original source, copyright holder, and redistribution license have not yet been verified in this repository.
+## 机器人模型资源
 
-The MIT License in `LICENSE` applies to this project's original application code. It must not be interpreted as relicensing third-party URDF, DAE, STL, texture, or related model assets.
+`robot_urdf/robot/` 是项目已有的模型资源集合，内容看起来描述了一台 Fetch 移动操作机器人。本仓库目前尚未核实其原始来源、版权所有者和再分发许可证。
 
-Before publishing a public release:
+`LICENSE` 中的 MIT License 仅适用于本项目原创的应用代码，不应被解释为对第三方 URDF、DAE、STL、纹理或其他相关模型资源的重新许可。
 
-1. Identify the authoritative source of every model asset.
-2. Confirm that redistribution and modification are permitted.
-3. Preserve the required copyright and license notices.
-4. Replace or remove any asset that cannot be redistributed.
+公开发布前需要完成：
+
+1. 确认每项模型资源的权威来源。
+2. 确认许可证允许再分发和修改。
+3. 保留许可证要求的版权与许可声明。
+4. 替换或移除任何无法合法再分发的资源。

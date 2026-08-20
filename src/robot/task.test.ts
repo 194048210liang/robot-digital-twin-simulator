@@ -99,7 +99,7 @@ describe('robot task', () => {
     const targets = taskStep().targets
     expect(store.addDraftStep(targets, 0.5)).not.toBeNull()
     expect(store.addDraftStep(targets, 0.8)).toBeNull()
-    expect(store.draftError).toBe('当前姿态与上一个姿态相同')
+    expect(store.draftError).toEqual({ key: 'task.storeErrors.duplicatePose' })
   })
 
   it('运行或暂停中的任务不能删除', () => {

@@ -8,50 +8,64 @@ import {
   faSliders,
   faWaveSquare,
 } from '@fortawesome/free-solid-svg-icons'
+import { useI18n } from 'vue-i18n'
 import { useRobotStore } from '@/stores/robot'
 import { useValidationStore } from '@/stores/validation'
 
 defineProps<{ currentTime: string }>()
 const store = useRobotStore()
 const validation = useValidationStore()
+const { t } = useI18n()
 
 const motionLabel = computed(() => {
-  const labels = {
-    idle: '待机',
-    running: '运行中',
-    paused: '已暂停',
-    stopped: '已停止',
-    error: '异常',
-  }
-  return labels[store.motionState]
+  const statusCodes = {
+    idle: 'IDLE',
+    running: 'RUNNING',
+    paused: 'PAUSED',
+    stopped: 'STOPPED',
+    error: 'ERROR',
+  } as const
+  return t(`status.${statusCodes[store.motionState]}`)
 })
 </script>
 
 <template>
-  <div class="status-strip" aria-label="系统状态">
+  <div class="status-strip" :aria-label="t('robot.systemStatus')">
     <div class="status-cell mode">
-      <FontAwesomeIcon class="ok" :icon="faCircleCheck" />仿真{{
-        store.modelLoaded ? '就绪' : '加载中'
+      <FontAwesomeIcon class="ok" :icon="faCircleCheck" />{{
+        store.modelLoaded ? t('robot.simulationReady') : t('robot.simulationLoading')
       }}
     </div>
     <div class="status-cell model">
-      <span class="label">模型：</span><FontAwesomeIcon :icon="faRobot" />
+      <span class="label">{{ t('robot.model') }}</span
+      ><FontAwesomeIcon :icon="faRobot" />
       <span class="model-name" :title="store.modelName">{{ store.modelName }}</span>
     </div>
     <div class="status-cell">
-      <FontAwesomeIcon :icon="faSliders" /><span class="label">可控关节：</span
+      <FontAwesomeIcon :icon="faSliders" /><span class="label">{{
+        t('robot.controllableJoints')
+      }}</span
       >{{ store.joints.length }}
     </div>
     <div class="status-cell tcp-source">
-      <FontAwesomeIcon :icon="faCrosshairs" /><span class="label">TCP：</span>
-      <span :title="store.tcpState.sourceLink">{{ store.tcpState.sourceLink || '未识别' }}</span>
+      <FontAwesomeIcon :icon="faCrosshairs" /><span class="label">{{ t('robot.tcp') }}</span>
+      <span :title="store.tcpState.sourceLink">{{
+        store.tcpState.sourceLink || t('robot.unrecognized')
+      }}</span>
     </div>
     <div class="status-cell">
       <FontAwesomeIcon :class="{ ok: validation.isRecording }" :icon="faWaveSquare" />
-      <span class="label">采样：</span>{{ validation.isRecording ? '记录中' : '就绪' }}
+      <span class="label">{{ t('robot.sampling') }}</span
+      >{{ validation.isRecording ? t('status.RECORDING') : t('status.READY') }}
     </div>
-    <div class="status-cell"><span class="label">FPS：</span>{{ store.fps || '—' }}</div>
-    <div class="status-cell motion"><span class="label">运动状态：</span>{{ motionLabel }}</div>
+    <div class="status-cell">
+      <span class="label">{{ t('robot.fps') }}</span
+      >{{ store.fps || '—' }}
+    </div>
+    <div class="status-cell motion">
+      <span class="label">{{ t('robot.motionStatus') }}</span
+      >{{ motionLabel }}
+    </div>
     <time class="clock">{{ currentTime }}</time>
   </div>
 </template>

@@ -7,13 +7,20 @@ import { TcpFrameHelper } from '@/graphics/tcp-frame-helper'
 import { TrajectoryLine } from '@/graphics/trajectory-line'
 import { createRobotModelProfile } from '@/robot/urdf-model'
 import type { TrajectoryPoint } from '@/robot/trajectory'
-import type { JointDefinition, JointState, RobotModelProfile, TcpState } from '@/robot/types'
+import type {
+  JointDefinition,
+  JointState,
+  RobotModelProfile,
+  TcpState,
+  TranslationDescriptor,
+} from '@/robot/types'
 
 interface RobotSceneCallbacks {
   onFps: (fps: number) => void
   onTcpState: (state: TcpState) => void
   onModelLoaded: (profile: RobotModelProfile) => void
-  onModelError: (message: string) => void
+  onModelError: (error: TranslationDescriptor) => void
+  translate: (text: TranslationDescriptor) => string
 }
 
 interface RobotLoadOptions {
@@ -26,13 +33,23 @@ interface RobotLoadOptions {
 const transparentPixel =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLqWQAAAABJRU5ErkJggg=='
 
+class RobotSceneError extends Error {
+  constructor(readonly translation: TranslationDescriptor) {
+    super(translation.key)
+  }
+}
+
+function sceneError(error: unknown, fallbackKey: string): TranslationDescriptor {
+  return error instanceof RobotSceneError ? error.translation : { key: fallbackKey }
+}
+
 function normalizeAssetPath(path: string) {
   const withoutQuery = path.split(/[?#]/, 1)[0] ?? path
   let decoded = withoutQuery
   try {
     decoded = decodeURIComponent(withoutQuery)
   } catch {
-    // 保留无法解码的原始路径，后续仍可按文件名匹配。
+    // Preserve the raw path so asset matching can still fall back to the file name.
   }
   const normalized = decoded
     .replace(/^package:\/\//i, '')
@@ -89,7 +106,7 @@ export class RobotScene {
     this.scene.background = new THREE.Color(0xe2e8ee)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
-    this.renderer.domElement.setAttribute('aria-label', '机器人三维视图')
+    this.updateAccessibilityLabel()
     this.container.appendChild(this.renderer.domElement)
 
     this.camera.position.set(2.7, 1.9, 3.1)
@@ -164,9 +181,9 @@ export class RobotScene {
         },
         undefined,
         (error) => {
-          const message = error instanceof Error ? error.message : 'URDF 模型加载失败'
-          this.callbacks.onModelError(message)
-          reject(new Error(message))
+          const translation = sceneError(error, 'robot.modelLoadFailed')
+          this.callbacks.onModelError(translation)
+          reject(error instanceof Error ? error : new RobotSceneError(translation))
         },
       )
     })
@@ -175,13 +192,15 @@ export class RobotScene {
   async loadRobotFiles(files: File[]) {
     const urdfFiles = files.filter((file) => /\.urdf$/i.test(file.name))
     if (urdfFiles.length !== 1) {
-      const message = urdfFiles.length === 0 ? '请选择一个 URDF 文件' : '一次只能加载一个 URDF 文件'
-      this.callbacks.onModelError(message)
-      throw new Error(message)
+      const translation = {
+        key: urdfFiles.length === 0 ? 'robot.errors.chooseUrdf' : 'robot.errors.oneUrdfOnly',
+      }
+      this.callbacks.onModelError(translation)
+      throw new RobotSceneError(translation)
     }
 
     const urdfFile = urdfFiles[0]
-    if (!urdfFile) throw new Error('URDF 文件不存在')
+    if (!urdfFile) throw new RobotSceneError({ key: 'robot.errors.urdfMissing' })
     const urdfPath = normalizeAssetPath(urdfFile.webkitRelativePath || urdfFile.name)
     const resourceFiles = files.filter((file) => file !== urdfFile)
     const exactUrls = new Map<string, string>()
@@ -211,9 +230,9 @@ export class RobotScene {
     const parsed = new window.DOMParser().parseFromString(content, 'application/xml')
     if (parsed.querySelector('parsererror') || parsed.documentElement.tagName !== 'robot') {
       for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl)
-      const message = 'URDF XML 格式无效'
-      this.callbacks.onModelError(message)
-      throw new Error(message)
+      const translation = { key: 'robot.errors.invalidUrdfXml' }
+      this.callbacks.onModelError(translation)
+      throw new RobotSceneError(translation)
     }
 
     try {
@@ -230,8 +249,7 @@ export class RobotScene {
       return profile
     } catch (error) {
       for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl)
-      const message = error instanceof Error ? error.message : 'URDF 模型解析失败'
-      this.callbacks.onModelError(message)
+      this.callbacks.onModelError(sceneError(error, 'robot.errors.parseFailed'))
       throw error
     }
   }
@@ -294,6 +312,13 @@ export class RobotScene {
     this.needsRender = true
   }
 
+  updateAccessibilityLabel() {
+    const translation = this.robot
+      ? { key: 'robot.namedViewportAria', params: { name: this.robot.name || 'Robot' } }
+      : { key: 'robot.viewportAria' }
+    this.renderer.domElement.setAttribute('aria-label', this.callbacks.translate(translation))
+  }
+
   async requestFullscreen() {
     if (document.fullscreenElement) await document.exitFullscreen()
     else await this.container.requestFullscreen()
@@ -353,7 +378,10 @@ export class RobotScene {
         path,
         (result) => {
           if (!result) {
-            done(null, new Error(`无法读取模型：${path}`))
+            done(
+              null,
+              new RobotSceneError({ key: 'robot.errors.modelReadFailed', params: { path } }),
+            )
             return
           }
           result.scene.traverse((object) => {
@@ -367,7 +395,7 @@ export class RobotScene {
       return
     }
 
-    done(null, new Error(`不支持的模型格式：${path}`))
+    done(null, new RobotSceneError({ key: 'robot.errors.unsupportedModel', params: { path } }))
   }
 
   private createLoader(manager: THREE.LoadingManager) {
@@ -395,7 +423,10 @@ export class RobotScene {
     this.lastJointValues.clear()
     this.pendingJoints = null
     robot.updateMatrixWorld(true)
-    this.renderer.domElement.setAttribute('aria-label', `${profile.name} 机器人三维视图`)
+    this.renderer.domElement.setAttribute(
+      'aria-label',
+      this.callbacks.translate({ key: 'robot.namedViewportAria', params: { name: profile.name } }),
+    )
     this.needsRender = true
     this.fitCamera()
     window.setTimeout(() => {

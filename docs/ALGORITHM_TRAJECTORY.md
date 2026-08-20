@@ -1,5 +1,7 @@
 # 外部算法轨迹格式（等级 2）
 
+[简体中文](./ALGORITHM_TRAJECTORY.md) | [English](./ALGORITHM_TRAJECTORY.en.md)
+
 等级 2 用于验证使用者已经在外部实现的 IK 或轨迹算法。RoboStation 不运行算法代码，只导入算法输出的数值结果，转换成现有 `RobotTask` 播放，并比较目标 TCP 与实际到达 TCP。
 
 ## 推荐流程

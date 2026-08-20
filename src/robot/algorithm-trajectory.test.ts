@@ -44,7 +44,7 @@ describe('external algorithm trajectory', () => {
 
     expect(file).not.toBeNull()
     if (!file) return
-    expect(getAlgorithmTrajectoryCompatibilityError(file, joints, 'tool0')).toBe('')
+    expect(getAlgorithmTrajectoryCompatibilityError(file, joints, 'tool0')).toBeNull()
 
     const task = algorithmTrajectoryToTaskInput(file, joints)
     expect(task.steps).toHaveLength(1)
@@ -64,20 +64,20 @@ describe('external algorithm trajectory', () => {
   it('拒绝 TCP、关节全集和限位不兼容的算法结果', () => {
     const joints = [joint()]
     const wrongTcp = template(joints)
-    expect(getAlgorithmTrajectoryCompatibilityError(wrongTcp, joints, 'other-tool')).toContain(
-      'TCP Link 不一致',
+    expect(getAlgorithmTrajectoryCompatibilityError(wrongTcp, joints, 'other-tool')?.key).toBe(
+      'task.fileErrors.trajectoryTcpMismatch',
     )
 
     const missingJoint = template(joints)
     missingJoint.trajectory[0]!.joints = {}
-    expect(getAlgorithmTrajectoryCompatibilityError(missingJoint, joints, 'tool0')).toContain(
-      '缺少关节解',
+    expect(getAlgorithmTrajectoryCompatibilityError(missingJoint, joints, 'tool0')?.key).toBe(
+      'task.fileErrors.missingSolutions',
     )
 
     const outOfLimit = template(joints)
     outOfLimit.trajectory[0]!.joints['joint-a'] = 2
-    expect(getAlgorithmTrajectoryCompatibilityError(outOfLimit, joints, 'tool0')).toContain(
-      '超出 URDF 限位',
+    expect(getAlgorithmTrajectoryCompatibilityError(outOfLimit, joints, 'tool0')?.key).toBe(
+      'task.fileErrors.outOfLimit',
     )
   })
 })

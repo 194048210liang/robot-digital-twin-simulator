@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faCube } from '@fortawesome/free-solid-svg-icons'
+import { faCube, faGlobe } from '@fortawesome/free-solid-svg-icons'
 import type { TabPaneName } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import BatchSetDialog from '@/components/BatchSetDialog.vue'
 import ConsolePanel from '@/components/ConsolePanel.vue'
@@ -14,11 +15,13 @@ import TcpStatusPanel from '@/components/TcpStatusPanel.vue'
 import TopStatusBar from '@/components/TopStatusBar.vue'
 import ValidationPanel from '@/components/ValidationPanel.vue'
 import { useRobotWorkstation } from '@/composables/useRobotWorkstation'
+import { isAppLocale, persistLocale, type AppLocale } from '@/i18n'
 
 type ControlPanel = 'joint' | 'tcp' | 'task' | 'validation'
 
 const route = useRoute()
 const router = useRouter()
+const { locale, t } = useI18n()
 const batchDialogVisible = ref(false)
 const activePanel = ref<ControlPanel>(
   route.query.tab === 'tcp' || route.query.tab === 'task' || route.query.tab === 'validation'
@@ -46,6 +49,12 @@ function selectPanel(panel: TabPaneName) {
 function openBatchSet() {
   batchDialogVisible.value = true
 }
+
+function changeLanguage(command: AppLocale) {
+  if (!isAppLocale(command)) return
+  locale.value = command
+  persistLocale(command)
+}
 </script>
 
 <template>
@@ -53,27 +62,42 @@ function openBatchSet() {
     <header class="titlebar">
       <div class="brand">
         <span class="brand-mark"><FontAwesomeIcon :icon="faCube" /></span
-        ><strong>RoboStation</strong><span class="brand-divider" /><span
-          >机器人离线仿真与验证工作站</span
-        >
+        ><strong>{{ t('common.appName') }}</strong
+        ><span class="brand-divider" /><span>{{ t('common.appSubtitle') }}</span>
       </div>
+      <ElDropdown trigger="click" @command="changeLanguage">
+        <ElButton class="title-language" text :aria-label="t('common.language')">
+          <FontAwesomeIcon :icon="faGlobe" />
+          {{ locale === 'en-US' ? t('common.english') : t('common.chinese') }}
+        </ElButton>
+        <template #dropdown>
+          <ElDropdownMenu>
+            <ElDropdownItem command="zh-CN" :disabled="locale === 'zh-CN'">
+              {{ t('common.chinese') }}
+            </ElDropdownItem>
+            <ElDropdownItem command="en-US" :disabled="locale === 'en-US'">
+              {{ t('common.english') }}
+            </ElDropdownItem>
+          </ElDropdownMenu>
+        </template>
+      </ElDropdown>
     </header>
     <TopStatusBar :current-time="currentTime" />
 
     <main class="workspace">
       <RobotViewport />
-      <section class="control panel" aria-label="机器人控制区">
+      <section class="control panel" :aria-label="t('robot.controlArea')">
         <ElTabs
           :model-value="activePanel"
           class="control-tabs"
           stretch
-          aria-label="控制视图"
+          :aria-label="t('robot.controlView')"
           @tab-change="selectPanel"
         >
-          <ElTabPane label="关节示教" name="joint" />
-          <ElTabPane label="TCP 状态" name="tcp" />
-          <ElTabPane label="任务编排" name="task" />
-          <ElTabPane label="验证结果" name="validation" />
+          <ElTabPane :label="t('joint.teaching')" name="joint" />
+          <ElTabPane :label="t('tcp.title')" name="tcp" />
+          <ElTabPane :label="t('task.title')" name="task" />
+          <ElTabPane :label="t('validation.title')" name="validation" />
         </ElTabs>
         <div class="control-content">
           <JointControlPanel v-show="activePanel === 'joint'" />
@@ -138,6 +162,17 @@ function openBatchSet() {
 .brand-mark svg {
   transform: rotate(-30deg);
   font-size: 13px;
+}
+.title-language {
+  min-width: 104px;
+  gap: 8px;
+  color: #e7eef7;
+  font-size: 13px;
+}
+.title-language:hover,
+.title-language:focus-visible {
+  color: #fff;
+  background: rgb(255 255 255 / 9%);
 }
 .workspace {
   min-height: 0;

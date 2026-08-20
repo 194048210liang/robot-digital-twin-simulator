@@ -26,6 +26,18 @@ JSON / CSV Export
 
 The repository includes a Fetch mobile manipulator as its default example. It also supports local URDF packages with mesh and texture assets, then derives controllable joints, limits, and display units from the imported model.
 
+## Interface Preview
+
+<p align="center">
+  <img src="./docs/assets/robostation-validation-workbench.png" alt="RoboStation simulation validation workstation" width="100%" />
+</p>
+
+<p align="center">
+  <sub>Inspect the URDF scene, monitor task execution, review validation metrics, and export JSON / CSV results in one workspace.</sub>
+</p>
+
+> **Closed-loop validation:** Every completed run preserves joint states, the TCP trajectory, limit checks, and error metrics so simulation results can be reviewed, reproduced, and exported.
+
 ## Why RoboStation
 
 - **Model-agnostic input**: load a local URDF package and extract controllable joints, joint types, limits, velocities, and the end-effector link.
@@ -78,7 +90,7 @@ The repository includes a Fetch mobile manipulator as its default example. It al
 | Simulation record         | `.simulation.json`           | Store the model, task, samples, errors, and validation result       |
 | Trajectory data           | `.trajectory.csv`            | Export time-series joint, TCP, target, and tracking-error data      |
 
-See [External Algorithm Trajectory Format](./docs/ALGORITHM_TRAJECTORY.md) for the current schema, units, and validation rules. The linked specification is currently maintained in Chinese; an English protocol document can be added when the format is finalized.
+See [External Algorithm Trajectory Format](./docs/ALGORITHM_TRAJECTORY.en.md) for the current schema, units, and validation rules.
 
 ## Interface Layout
 
@@ -154,13 +166,15 @@ Exported tasks and trajectories are simulation and algorithm-validation data. Th
 
 ## Related Documents
 
-- [External Algorithm Trajectory Format](./docs/ALGORITHM_TRAJECTORY.md)
-- [IK Interface and Integration Design](./docs/IK_DESIGN.md)
-- [Project Plan and Scope](./PROJECT_PLAN.md)
-- [Third-Party Notices](./THIRD_PARTY_NOTICES.md)
+| Document                             | English                                   | 中文                                   | Covers                                                   |
+| ------------------------------------ | ----------------------------------------- | -------------------------------------- | -------------------------------------------------------- |
+| External Algorithm Trajectory Format | [Read](./docs/ALGORITHM_TRAJECTORY.en.md) | [阅读](./docs/ALGORITHM_TRAJECTORY.md) | Result schema, units, import checks, and validation data |
+| IK Interface and Integration Design  | [Read](./docs/IK_DESIGN.en.md)            | [阅读](./docs/IK_DESIGN.md)            | IK provider boundaries, pipeline, and failure model      |
+| Project Plan and Scope               | [Read](./PROJECT_PLAN.en.md)              | [阅读](./PROJECT_PLAN.md)              | Product goals, architecture, release scope, and risks    |
+| Third-Party Notices                  | [Read](./THIRD_PARTY_NOTICES.en.md)       | [阅读](./THIRD_PARTY_NOTICES.md)       | Model provenance and redistribution considerations       |
 
 A complete user manual will be prepared separately after the workflow becomes stable. It is intentionally not expanded in the current README.
 
 ## License
 
-Application code is released under the [MIT License](./LICENSE). Robot model assets may have separate third-party licenses. Review [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) before publishing or redistributing model resources.
+Application code is released under the [MIT License](./LICENSE). Robot model assets may have separate third-party licenses. Review [THIRD_PARTY_NOTICES.en.md](./THIRD_PARTY_NOTICES.en.md) before publishing or redistributing model resources.

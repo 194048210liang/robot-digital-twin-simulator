@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faDownload, faGear, faTrashCan } from '@fortawesome/free-solid-svg-icons'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { RobotLog } from '@/robot/types'
 import type { SimulationRecord } from '@/robot/simulation-validation'
 import { useRobotStore } from '@/stores/robot'
@@ -15,19 +16,20 @@ const route = useRoute()
 const router = useRouter()
 const store = useRobotStore()
 const validation = useValidationStore()
+const { locale, t } = useI18n()
 const activeTab = ref<BottomTab>('event')
 const autoScroll = ref(true)
 const keepAcks = ref(true)
-const tabs: { id: BottomTab; label: string }[] = [
-  { id: 'event', label: '仿真事件' },
-  { id: 'validation', label: '验证记录' },
-  { id: 'communication', label: '通信诊断' },
-]
+const tabs = computed<{ id: BottomTab; label: string }[]>(() => [
+  { id: 'event', label: t('console.event') },
+  { id: 'validation', label: t('console.validation') },
+  { id: 'communication', label: t('console.communication') },
+])
 const eventLogs = computed(() =>
   store.logs.filter(
     (log) =>
       log.channel !== 'communication' ||
-      (log.direction === 'SYS' && log.source !== '通信' && log.source !== 'Mock'),
+      (log.direction === 'SYS' && log.source !== 'COMMUNICATION' && log.source !== 'MOCK'),
   ),
 )
 const communicationLogs = computed(() =>
@@ -50,22 +52,35 @@ function exportVisibleLogs() {
 }
 
 function levelLabel(log: RobotLog) {
-  return { info: '信息', warning: '警告', error: '错误' }[log.level]
+  return log?.level ? t(`console.levels.${log.level}`) : t('common.none')
 }
 
 function recordStatus(status: string) {
-  return {
-    running: '采样中',
-    paused: '已暂停',
-    completed: '已完成',
-    stopped: '已停止',
-    error: '异常',
-    idle: '未开始',
-  }[status]
+  return t(`validation.statuses.${status}`)
+}
+
+function sourceLabel(source: RobotLog['source']) {
+  return t(`console.sources.${source.toLowerCase()}`)
+}
+
+function logMessage(log: RobotLog) {
+  return t(log.messageKey, log.messageParams ?? {})
+}
+
+function logDetails(log: RobotLog) {
+  if (log.detailsText) return log.detailsText
+  if (log.detailsKey) return t(log.detailsKey, log.detailsParams ?? {})
+  return t('common.none')
+}
+
+function logStatus(log: RobotLog) {
+  return log?.status ? t(`status.${log.status}`) : t('common.none')
 }
 
 function formatDate(timestamp: number | null) {
-  return timestamp ? new Date(timestamp).toLocaleString('zh-CN', { hour12: false }) : '—'
+  return timestamp
+    ? new Date(timestamp).toLocaleString(locale.value, { hour12: false })
+    : t('common.none')
 }
 
 function formatDuration(milliseconds: number) {
@@ -85,8 +100,8 @@ function openValidationRow(row: SimulationRecord) {
 </script>
 
 <template>
-  <section class="console panel" aria-label="仿真数据台">
-    <ElTabs v-model="activeTab" class="console-tabs" aria-label="仿真数据类型">
+  <section class="console panel" :aria-label="t('console.title')">
+    <ElTabs v-model="activeTab" class="console-tabs" :aria-label="t('console.dataType')">
       <ElTabPane v-for="tab in tabs" :key="tab.id" :name="tab.id">
         <template #label>
           <ElBadge
@@ -107,33 +122,49 @@ function openValidationRow(row: SimulationRecord) {
         v-if="activeTab !== 'validation'"
         class="log-table adaptive-table"
         :data="visibleLogs"
-        :empty-text="activeTab === 'communication' ? '暂无通信诊断记录' : '暂无仿真事件'"
+        :empty-text="
+          activeTab === 'communication' ? t('console.noCommunication') : t('console.noEvents')
+        "
         row-key="id"
         border
         size="small"
         height="100%"
       >
-        <ElTableColumn prop="time" label="时间" width="130" />
-        <ElTableColumn v-if="activeTab === 'event'" label="级别" width="82">
+        <ElTableColumn prop="time" :label="t('common.time')" width="130" />
+        <ElTableColumn v-if="activeTab === 'event'" :label="t('console.level')" width="82">
           <template #default="{ row }">
             <span :class="row.level">{{ levelLabel(row) }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn v-else label="方向" width="82">
+        <ElTableColumn v-else :label="t('common.direction')" width="82">
           <template #default="{ row }">
             <span :class="row.direction === 'RX' ? 'rx' : 'tx'">● {{ row.direction }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="source" label="来源" width="96" />
-        <ElTableColumn prop="code" label="代码 / 类型" width="140" />
-        <ElTableColumn prop="message" label="事件 / 消息" min-width="280" show-overflow-tooltip />
-        <ElTableColumn prop="details" label="数据 / 详情" min-width="280" show-overflow-tooltip />
-        <ElTableColumn v-if="activeTab === 'communication'" label="往返时间" width="110">
-          <template #default="{ row }">{{ row.latency ? `${row.latency} ms` : '—' }}</template>
+        <ElTableColumn :label="t('common.source')" width="96">
+          <template #default="{ row }">{{ sourceLabel(row.source) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="90">
+        <ElTableColumn prop="code" :label="t('common.codeType')" width="140" />
+        <ElTableColumn :label="t('common.eventMessage')" min-width="280" show-overflow-tooltip>
+          <template #default="{ row }">{{ logMessage(row) }}</template>
+        </ElTableColumn>
+        <ElTableColumn :label="t('common.dataDetails')" min-width="280" show-overflow-tooltip>
+          <template #default="{ row }">{{ logDetails(row) }}</template>
+        </ElTableColumn>
+        <ElTableColumn
+          v-if="activeTab === 'communication'"
+          :label="t('common.roundTripTime')"
+          width="110"
+        >
           <template #default="{ row }">
-            <span :class="row.status === '成功' ? 'success' : row.level">{{ row.status }}</span>
+            {{ row.latency ? `${row.latency} ms` : t('common.none') }}
+          </template>
+        </ElTableColumn>
+        <ElTableColumn :label="t('common.status')" width="90">
+          <template #default="{ row }">
+            <span :class="row.status === 'SUCCESS' ? 'success' : row.level">{{
+              logStatus(row)
+            }}</span>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -142,19 +173,24 @@ function openValidationRow(row: SimulationRecord) {
         v-else
         class="log-table validation-table adaptive-table"
         :data="validation.records"
-        empty-text="播放任务后将在此生成验证记录"
+        :empty-text="t('validation.recordsEmpty')"
         row-key="id"
         border
         size="small"
         height="100%"
         @row-dblclick="openValidationRow"
       >
-        <ElTableColumn type="index" label="序号" width="62" align="center" />
-        <ElTableColumn label="开始时间" width="180">
+        <ElTableColumn type="index" :label="t('common.index')" width="62" align="center" />
+        <ElTableColumn :label="t('common.startTime')" width="180">
           <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
         </ElTableColumn>
-        <ElTableColumn prop="taskName" label="任务名称" min-width="210" show-overflow-tooltip />
-        <ElTableColumn label="完成状态" width="100" align="center">
+        <ElTableColumn
+          prop="taskName"
+          :label="t('task.taskName')"
+          min-width="210"
+          show-overflow-tooltip
+        />
+        <ElTableColumn :label="t('validation.completionStatus')" width="100" align="center">
           <template #default="{ row }">
             <span
               :class="row.summary.passed ? 'success' : row.status === 'running' ? 'tx' : 'warning'"
@@ -163,21 +199,23 @@ function openValidationRow(row: SimulationRecord) {
             </span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="运行时长" width="110" align="center">
+        <ElTableColumn :label="t('validation.duration')" width="110" align="center">
           <template #default="{ row }">{{ formatDuration(row.durationMs) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="采样点" width="100" align="center">
+        <ElTableColumn :label="t('validation.samplePoints')" width="100" align="center">
           <template #default="{ row }">{{ row.summary.sampleCount }}</template>
         </ElTableColumn>
-        <ElTableColumn label="TCP 路径" width="120" align="center">
+        <ElTableColumn :label="t('validation.tcpPath')" width="120" align="center">
           <template #default="{ row }">{{ row.summary.tcpPathLength.toFixed(3) }} m</template>
         </ElTableColumn>
-        <ElTableColumn label="关节越限" width="100" align="center">
+        <ElTableColumn :label="t('validation.jointViolations')" width="100" align="center">
           <template #default="{ row }">{{ row.summary.positionViolationCount }}</template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="90" align="center">
+        <ElTableColumn :label="t('common.operation')" width="90" align="center">
           <template #default="{ row }">
-            <ElButton type="primary" link @click="showRecord(row.id)">查看</ElButton>
+            <ElButton type="primary" link @click="showRecord(row.id)">
+              {{ t('common.view') }}
+            </ElButton>
           </template>
         </ElTableColumn>
       </ElTable>
@@ -186,17 +224,18 @@ function openValidationRow(row: SimulationRecord) {
     <footer class="console-footer">
       <div class="footer-status">
         <span
-          >模型已加载：<strong>{{ store.modelName }}</strong></span
+          >{{ t('robot.loadedModel') }}<strong>{{ store.modelName }}</strong></span
         >
         <i />
         <span
-          >记录器：<b>● {{ validation.isRecording ? '采样中' : '就绪' }}</b></span
+          >{{ t('robot.recorder')
+          }}<b>● {{ validation.isRecording ? t('status.RECORDING') : t('status.READY') }}</b></span
         >
         <i />
         <span>{{
           activeTab === 'validation'
-            ? `验证记录：${validation.records.length}`
-            : `日志：${statusLabel}`
+            ? t('validation.recordsCount', { count: validation.records.length })
+            : t('robot.logs', { value: statusLabel })
         }}</span>
       </div>
       <div class="footer-actions">
@@ -205,24 +244,24 @@ function openValidationRow(row: SimulationRecord) {
           :disabled="validation.isRecording"
           @click="validation.clear()"
         >
-          <FontAwesomeIcon :icon="faTrashCan" />清除记录
+          <FontAwesomeIcon :icon="faTrashCan" />{{ t('console.clearRecords') }}
         </ElButton>
         <template v-else>
           <ElButton @click="store.clearLogs()">
-            <FontAwesomeIcon :icon="faTrashCan" />清除日志
+            <FontAwesomeIcon :icon="faTrashCan" />{{ t('console.clearLogs') }}
           </ElButton>
           <ElButton @click="exportVisibleLogs">
-            <FontAwesomeIcon :icon="faDownload" />导出日志
+            <FontAwesomeIcon :icon="faDownload" />{{ t('console.exportLogs') }}
           </ElButton>
         </template>
         <ElPopover placement="top-end" :width="230" trigger="click">
           <template #reference>
-            <ElButton><FontAwesomeIcon :icon="faGear" />设置</ElButton>
+            <ElButton><FontAwesomeIcon :icon="faGear" />{{ t('common.settings') }}</ElButton>
           </template>
           <div class="settings-panel">
-            <strong>数据台设置</strong>
-            <ElCheckbox v-model="autoScroll">自动滚动最新记录</ElCheckbox>
-            <ElCheckbox v-model="keepAcks">保留通信 ACK</ElCheckbox>
+            <strong>{{ t('settings.dataConsole') }}</strong>
+            <ElCheckbox v-model="autoScroll">{{ t('settings.autoScroll') }}</ElCheckbox>
+            <ElCheckbox v-model="keepAcks">{{ t('settings.keepAcks') }}</ElCheckbox>
           </div>
         </ElPopover>
       </div>

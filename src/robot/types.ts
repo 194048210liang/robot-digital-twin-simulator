@@ -6,6 +6,22 @@ export type SafetyState = 'normal' | 'warning' | 'error'
 export type LogLevel = 'info' | 'warning' | 'error'
 export type LogChannel = 'alarm' | 'command' | 'communication'
 export type TransportDirection = 'TX' | 'RX' | 'SYS'
+export type RobotLogSource =
+  | 'COMMUNICATION'
+  | 'MOCK'
+  | 'MODEL'
+  | 'TRAJECTORY'
+  | 'SIMULATION'
+  | 'STATE'
+  | 'CONTROL'
+  | 'SIMULATOR'
+  | 'VALIDATION'
+export type RobotLogStatus = 'SUCCESS' | 'SENT' | 'WARNING' | 'ERROR' | 'NONE'
+export type TranslationParams = Record<string, string | number>
+export interface TranslationDescriptor {
+  key: string
+  params?: TranslationParams
+}
 
 export interface JointDefinition {
   id: string
@@ -56,12 +72,15 @@ export interface RobotLog {
   level: LogLevel
   channel: LogChannel
   direction: TransportDirection
-  source: string
+  source: RobotLogSource
   code: string
-  message: string
-  details: string
+  messageKey: string
+  messageParams?: TranslationParams
+  detailsKey?: string
+  detailsParams?: TranslationParams
+  detailsText?: string
   latency?: number
-  status: '成功' | '已发送' | '警告' | '错误' | '—'
+  status: RobotLogStatus
 }
 
 export type RobotCommand =

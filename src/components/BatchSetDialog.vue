@@ -2,9 +2,10 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
-import type { JointState, TcpPose } from '@/robot/types'
+import type { JointState, TcpPose, TranslationDescriptor } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
 
@@ -22,10 +23,15 @@ const router = useRouter()
 const robotStore = useRobotStore()
 const taskStore = useRobotTaskStore()
 const controller = useRobotController()
+const { t } = useI18n()
 const mode = ref<BatchInputMode>('joint')
 const addToTask = ref(false)
 const jointRows = ref<BatchJointRow[]>([])
 const poseInput = ref<TcpPose>({ x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 })
+
+function issueText(issue: TranslationDescriptor | null, fallbackKey: string) {
+  return issue ? t(issue.key, issue.params ?? {}) : t(fallbackKey)
+}
 
 const canTeach = computed(
   () =>
@@ -53,7 +59,7 @@ function close() {
 
 function applyJointBatch() {
   if (!canApply.value) {
-    ElMessage.warning('请等待模型就绪和当前运动结束后再批量设置')
+    ElMessage.warning(t('joint.messages.waitBeforeBatch'))
     return
   }
 
@@ -67,13 +73,13 @@ function applyJointBatch() {
       !Number.isFinite(value) || position < joint.min || position > joint.max,
   )
   if (invalid) {
-    ElMessage.error(`${invalid.joint.displayName} 的目标值超出限位`)
+    ElMessage.error(t('joint.messages.targetOutOfLimit', { name: invalid.joint.displayName }))
     return
   }
 
   for (const { joint, position } of targets) {
     if (!controller.teachJointPosition(joint.id, position)) {
-      ElMessage.error(`${joint.displayName} 批量设置失败，请检查机器人状态`)
+      ElMessage.error(t('joint.messages.batchFailed', { name: joint.displayName }))
       return
     }
   }
@@ -84,13 +90,19 @@ function applyJointBatch() {
       robotStore.speedScale,
     )
     if (!step) {
-      ElMessage.warning(`批量设置已应用；${taskStore.draftError || '任务姿态添加失败'}`)
+      ElMessage.warning(
+        t('joint.messages.batchAppliedWithWarning', {
+          reason: issueText(taskStore.draftError, 'task.messages.poseAddFailed'),
+        }),
+      )
       close()
       return
     }
-    ElMessage.success(`批量设置已应用，并添加为姿态 ${taskStore.draftSteps.length}`)
+    ElMessage.success(
+      t('joint.messages.batchAppliedAndAdded', { count: taskStore.draftSteps.length }),
+    )
   } else {
-    ElMessage.success('关节目标已批量应用')
+    ElMessage.success(t('joint.messages.batchApplied'))
   }
   close()
 }
@@ -116,7 +128,7 @@ watch(mode, (value) => {
   <ElDialog
     :model-value="modelValue"
     class="batch-set-dialog"
-    title="批量设置"
+    :title="t('joint.batchSet')"
     width="min(760px, calc(100vw - 32px))"
     append-to-body
     destroy-on-close
@@ -124,12 +136,12 @@ watch(mode, (value) => {
   >
     <div class="batch-mode">
       <div>
-        <strong>输入类型</strong>
-        <span>选择关节空间目标或 TCP 笛卡尔目标</span>
+        <strong>{{ t('common.inputType') }}</strong>
+        <span>{{ t('joint.chooseInputType') }}</span>
       </div>
-      <ElRadioGroup v-model="mode" aria-label="批量设置输入类型">
-        <ElRadioButton value="joint">关节目标</ElRadioButton>
-        <ElRadioButton value="tcp">TCP 目标位姿</ElRadioButton>
+      <ElRadioGroup v-model="mode" :aria-label="t('joint.batchInputAria')">
+        <ElRadioButton value="joint">{{ t('joint.jointTarget') }}</ElRadioButton>
+        <ElRadioButton value="tcp">{{ t('tcp.targetPose') }}</ElRadioButton>
       </ElRadioGroup>
     </div>
 
@@ -142,16 +154,16 @@ watch(mode, (value) => {
         size="small"
         height="360"
       >
-        <ElTableColumn label="关节" min-width="150">
+        <ElTableColumn :label="t('joint.title')" min-width="150">
           <template #default="{ row }">{{ row.joint.displayName }}</template>
         </ElTableColumn>
-        <ElTableColumn label="当前值" width="105" align="center">
+        <ElTableColumn :label="t('common.currentValue')" width="105" align="center">
           <template #default="{ row }">
             {{ toDisplayValue(row.joint, row.joint.current).toFixed(row.joint.displayDecimals) }}
             {{ row.joint.displayUnit }}
           </template>
         </ElTableColumn>
-        <ElTableColumn label="目标值" width="170" align="center">
+        <ElTableColumn :label="t('common.targetValue')" width="170" align="center">
           <template #default="{ row }">
             <label class="batch-value-input">
               <ElInputNumber
@@ -161,13 +173,13 @@ watch(mode, (value) => {
                 :step="row.joint.displayDecimals === 1 ? 0.1 : 0.01"
                 :precision="row.joint.displayDecimals"
                 :controls="false"
-                :aria-label="`${row.joint.displayName} 批量目标值`"
+                :aria-label="t('joint.batchTargetAria', { name: row.joint.displayName })"
               />
               <span>{{ row.joint.displayUnit }}</span>
             </label>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="限位" min-width="170" align="center">
+        <ElTableColumn :label="t('joint.limit')" min-width="170" align="center">
           <template #default="{ row }">
             {{ toDisplayValue(row.joint, row.joint.min).toFixed(row.joint.displayDecimals) }} ～
             {{ toDisplayValue(row.joint, row.joint.max).toFixed(row.joint.displayDecimals) }}
@@ -177,15 +189,15 @@ watch(mode, (value) => {
       </ElTable>
 
       <div class="task-option">
-        <ElCheckbox v-model="addToTask">同时添加为任务姿态</ElCheckbox>
-        <span>添加后可在关节示教底部继续补充姿态并保存任务。</span>
+        <ElCheckbox v-model="addToTask">{{ t('joint.addToTask') }}</ElCheckbox>
+        <span>{{ t('joint.addToTaskHint') }}</span>
       </div>
     </template>
 
     <template v-else>
       <ElAlert
-        title="当前未配置正式 IK Provider"
-        description="可以填写 TCP 目标位姿，但在 IK 返回合法关节解之前，不能应用到模型，也不能添加为可执行任务。"
+        :title="t('tcp.ikUnavailableTitle')"
+        :description="t('tcp.ikUnavailableDescription')"
         type="warning"
         :closable="false"
         show-icon
@@ -232,24 +244,20 @@ watch(mode, (value) => {
         </ElFormItem>
       </ElForm>
       <div class="task-option disabled">
-        <ElCheckbox :model-value="false" disabled>同时添加为任务姿态</ElCheckbox>
-        <span>接入 IK 后，合法解会转换成现有的关节空间任务姿态。</span>
+        <ElCheckbox :model-value="false" disabled>{{ t('joint.addToTask') }}</ElCheckbox>
+        <span>{{ t('joint.addToTaskAfterIk') }}</span>
       </div>
     </template>
 
     <template #footer>
       <div class="dialog-footer">
-        <ElButton type="primary" plain @click="goToTasks">前往任务编排</ElButton>
+        <ElButton type="primary" plain @click="goToTasks">{{ t('task.goToTasks') }}</ElButton>
         <span class="footer-spacer" />
-        <ElButton @click="close">取消</ElButton>
-        <ElTooltip
-          :disabled="mode === 'joint'"
-          content="需要先接入正式 IK Provider"
-          placement="top"
-        >
+        <ElButton @click="close">{{ t('common.cancel') }}</ElButton>
+        <ElTooltip :disabled="mode === 'joint'" :content="t('tcp.ikRequired')" placement="top">
           <span>
             <ElButton type="primary" :disabled="!canApply" @click="applyJointBatch">
-              应用批量设置
+              {{ t('joint.applyBatch') }}
             </ElButton>
           </span>
         </ElTooltip>

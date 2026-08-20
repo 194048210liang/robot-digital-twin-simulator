@@ -48,7 +48,7 @@ describe('robot task file', () => {
     })
 
     expect(parseRobotTaskFile(JSON.parse(JSON.stringify(file)))).toEqual(file)
-    expect(getTaskCompatibilityError(file, [joint()])).toBe('')
+    expect(getTaskCompatibilityError(file, [joint()])).toBeNull()
   })
 
   it('拒绝缺少关节或关节限位不同的模型', () => {
@@ -59,8 +59,10 @@ describe('robot task file', () => {
       joints: [joint()],
     })
 
-    expect(getTaskCompatibilityError(file, [])).toContain('缺少任务关节')
-    expect(getTaskCompatibilityError(file, [joint({ max: 2 })])).toContain('关节类型或限位')
+    expect(getTaskCompatibilityError(file, [])?.key).toBe('task.fileErrors.missingJoints')
+    expect(getTaskCompatibilityError(file, [joint({ max: 2 })])?.key).toBe(
+      'task.fileErrors.modelMismatch',
+    )
   })
 
   it('带 TCP 目标的任务必须匹配末端 Link', () => {
@@ -82,7 +84,9 @@ describe('robot task file', () => {
       },
     )
 
-    expect(getTaskCompatibilityError(file, [joint()], 'other-tool')).toContain('TCP Link')
+    expect(getTaskCompatibilityError(file, [joint()], 'other-tool')?.key).toBe(
+      'task.fileErrors.tcpMismatch',
+    )
   })
 
   it('拒绝未知格式和版本', () => {

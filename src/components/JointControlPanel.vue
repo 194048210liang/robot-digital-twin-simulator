@@ -1,21 +1,27 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { jointGroupLabels, toDisplayValue, toInternalValue } from '@/robot/config'
+import { useI18n } from 'vue-i18n'
+import { toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
-import type { JointGroup, JointState } from '@/robot/types'
+import type { JointGroup, JointState, TranslationDescriptor } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
 
 const store = useRobotStore()
 const taskStore = useRobotTaskStore()
 const controller = useRobotController()
+const { t } = useI18n()
 const groups: JointGroup[] = ['torso', 'arm', 'head', 'gripper']
 const saveDialogVisible = ref(false)
 const draftName = ref('')
 const draftDescription = ref('')
 const pendingJointPositions = new Map<string, number>()
 let teachingFrame = 0
+
+function issueText(issue: TranslationDescriptor | null, fallbackKey: string) {
+  return issue ? t(issue.key, issue.params ?? {}) : t(fallbackKey)
+}
 const grouped = computed(() =>
   groups
     .map((group) => ({ group, joints: store.joints.filter((joint) => joint.group === group) }))
@@ -60,7 +66,7 @@ function setSpeedScale(value: number | number[]) {
 function addCurrentPose() {
   flushJointPositions()
   if (!canTeach.value) {
-    ElMessage.warning('请等待当前运动结束后再添加姿态')
+    ElMessage.warning(t('joint.messages.waitBeforeAddPose'))
     return
   }
   const step = taskStore.addDraftStep(
@@ -68,15 +74,15 @@ function addCurrentPose() {
     store.speedScale,
   )
   if (!step) {
-    ElMessage.warning(taskStore.draftError || '当前姿态无法添加')
+    ElMessage.warning(issueText(taskStore.draftError, 'task.messages.poseCannotAdd'))
     return
   }
-  ElMessage.success(`已添加姿态 ${taskStore.draftSteps.length}`)
+  ElMessage.success(t('joint.messages.poseAdded', { count: taskStore.draftSteps.length }))
 }
 
 function openSaveDialog() {
   if (!taskStore.draftSteps.length) return
-  draftName.value = `机器人任务 ${taskStore.tasks.length + 1}`
+  draftName.value = t('task.defaultName', { number: taskStore.tasks.length + 1 })
   draftDescription.value = ''
   saveDialogVisible.value = true
 }
@@ -88,12 +94,12 @@ function saveTask() {
     steps: taskStore.draftSteps,
   })
   if (!task) {
-    ElMessage.error(taskStore.persistenceError || '请输入有效的任务名称')
+    ElMessage.error(issueText(taskStore.persistenceError, 'task.messages.invalidName'))
     return
   }
   saveDialogVisible.value = false
   taskStore.clearDraft()
-  ElMessage.success(`任务“${task.name}”已保存，可在机器人任务中播放`)
+  ElMessage.success(t('task.messages.saved', { name: task.name }))
 }
 
 onBeforeUnmount(() => {
@@ -104,11 +110,15 @@ onBeforeUnmount(() => {
 <template>
   <div class="joint-panel">
     <div class="joint-head">
-      <span>关节</span><span>当前值</span><span>示教值</span><span>最小</span><span>最大</span>
+      <span>{{ t('joint.title') }}</span
+      ><span>{{ t('common.currentValue') }}</span
+      ><span>{{ t('joint.teachingValue') }}</span
+      ><span>{{ t('common.minimum') }}</span
+      ><span>{{ t('common.maximum') }}</span>
     </div>
     <div class="joint-scroll">
       <template v-for="section in grouped" :key="section.group">
-        <div class="group-row">{{ jointGroupLabels[section.group] }}</div>
+        <div class="group-row">{{ t(`joint.groups.${section.group}`) }}</div>
         <div
           v-for="joint in section.joints"
           :key="joint.id"
@@ -131,7 +141,7 @@ onBeforeUnmount(() => {
               :step="joint.kind === 'prismatic' || joint.kind === 'virtual' ? 0.001 : 0.01"
               :show-tooltip="false"
               :disabled="!canTeach"
-              :aria-label="`${joint.displayName} 示教值`"
+              :aria-label="t('joint.teachingValueAria', { name: joint.displayName })"
               @update:model-value="setJointPosition(joint, $event)"
               @click.stop
             />
@@ -145,7 +155,7 @@ onBeforeUnmount(() => {
                 :precision="joint.displayDecimals"
                 :controls="false"
                 :disabled="!canTeach"
-                :aria-label="`${joint.displayName} 示教数值`"
+                :aria-label="t('joint.teachingNumberAria', { name: joint.displayName })"
                 @change="setFromDisplay(joint, $event)"
               />
               <small>{{ joint.displayUnit }}</small>
@@ -159,13 +169,13 @@ onBeforeUnmount(() => {
     <footer class="panel-summary">
       <div class="task-draft">
         <div class="draft-title">
-          <strong>任务姿态</strong>
-          <span>已添加 {{ taskStore.draftSteps.length }} 个</span>
+          <strong>{{ t('task.taskPose') }}</strong>
+          <span>{{ t('task.addedCount', { count: taskStore.draftSteps.length }) }}</span>
         </div>
-        <p>按添加顺序播放</p>
+        <p>{{ t('task.playInOrder') }}</p>
         <div class="draft-actions">
           <ElButton type="primary" :disabled="!canTeach" @click="addCurrentPose">
-            添加当前姿态
+            {{ t('task.addCurrentPose') }}
           </ElButton>
           <ElButton
             type="primary"
@@ -173,18 +183,22 @@ onBeforeUnmount(() => {
             :disabled="!taskStore.draftSteps.length"
             @click="openSaveDialog"
           >
-            保存任务
+            {{ t('task.saveTask') }}
           </ElButton>
         </div>
         <div v-if="taskStore.draftSteps.length" class="draft-tools">
-          <ElButton link @click="taskStore.removeLastDraftStep()">撤销上一步</ElButton>
-          <ElPopconfirm title="确定清空已添加的所有姿态？" @confirm="taskStore.clearDraft()">
-            <template #reference><ElButton type="danger" link>清空</ElButton></template>
+          <ElButton link @click="taskStore.removeLastDraftStep()">
+            {{ t('task.undoLast') }}
+          </ElButton>
+          <ElPopconfirm :title="t('task.clearPosesConfirm')" @confirm="taskStore.clearDraft()">
+            <template #reference>
+              <ElButton type="danger" link>{{ t('task.clearPoses') }}</ElButton>
+            </template>
           </ElPopconfirm>
         </div>
       </div>
       <div class="tcp-mini">
-        <strong>TCP 位置（基坐标系）</strong>
+        <strong>{{ t('tcp.positionBaseFrame') }}</strong>
         <dl>
           <div>
             <dt>X (m)</dt>
@@ -213,7 +227,7 @@ onBeforeUnmount(() => {
         </dl>
       </div>
       <div class="speed-control">
-        <strong>速度倍率</strong>
+        <strong>{{ t('joint.speedScale') }}</strong>
         <ElSlider
           size="small"
           :model-value="store.speedScale"
@@ -222,7 +236,7 @@ onBeforeUnmount(() => {
           :step="0.05"
           :show-tooltip="false"
           :disabled="!canTeach"
-          aria-label="速度倍率"
+          :aria-label="t('joint.speedScale')"
           @input="setSpeedScale"
         />
         <span>{{ Math.round(store.speedScale * 100) }}%</span>
@@ -231,41 +245,43 @@ onBeforeUnmount(() => {
 
     <ElDialog
       v-model="saveDialogVisible"
-      title="保存机器人任务"
+      :title="t('task.saveDialogTitle')"
       width="430px"
       append-to-body
       destroy-on-close
     >
       <ElForm label-position="top">
-        <ElFormItem label="任务名称" required>
+        <ElFormItem :label="t('task.taskName')" required>
           <ElInput
             v-model="draftName"
             maxlength="40"
             show-word-limit
-            placeholder="例如：抓取测试"
+            :placeholder="t('task.namePlaceholder')"
             @keyup.enter="saveTask"
           />
         </ElFormItem>
-        <ElFormItem label="任务说明">
+        <ElFormItem :label="t('task.taskDescription')">
           <ElInput
             v-model="draftDescription"
             type="textarea"
             :rows="2"
             maxlength="120"
             show-word-limit
-            placeholder="选填"
+            :placeholder="t('common.optional')"
           />
         </ElFormItem>
       </ElForm>
       <ElAlert
-        :title="`将保存 ${taskStore.draftSteps.length} 个姿态，并按添加顺序播放`"
+        :title="t('task.savePoseSummary', { count: taskStore.draftSteps.length })"
         type="info"
         :closable="false"
         show-icon
       />
       <template #footer>
-        <ElButton @click="saveDialogVisible = false">取消</ElButton>
-        <ElButton type="primary" :disabled="!draftName.trim()" @click="saveTask">保存任务</ElButton>
+        <ElButton @click="saveDialogVisible = false">{{ t('common.cancel') }}</ElButton>
+        <ElButton type="primary" :disabled="!draftName.trim()" @click="saveTask">
+          {{ t('task.saveTask') }}
+        </ElButton>
       </template>
     </ElDialog>
   </div>

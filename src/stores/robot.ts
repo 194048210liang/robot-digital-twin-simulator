@@ -10,13 +10,14 @@ import type {
   TcpState,
   MotionState,
   RobotModelProfile,
+  TranslationDescriptor,
 } from '@/robot/types'
 
 let logSequence = 0
 
 function timestamp() {
   const now = new Date()
-  const time = now.toLocaleTimeString('zh-CN', { hour12: false })
+  const time = now.toLocaleTimeString(undefined, { hour12: false })
   return `${time}.${String(now.getMilliseconds()).padStart(3, '0')}`
 }
 
@@ -34,7 +35,7 @@ export const useRobotStore = defineStore('robot', () => {
   const motionState = ref<MotionState>('idle')
   const safetyState = ref<SafetyState>('normal')
   const modelLoaded = ref(false)
-  const modelError = ref('')
+  const modelError = ref<TranslationDescriptor | null>(null)
   const modelName = ref('Fetch')
   const modelFileName = ref('robot.urdf')
   const speedScale = ref(0.5)
@@ -84,7 +85,7 @@ export const useRobotStore = defineStore('robot', () => {
     modelName.value = profile.name
     modelFileName.value = profile.fileName
     modelLoaded.value = true
-    modelError.value = ''
+    modelError.value = null
     motionState.value = 'idle'
     tcpState.value = {
       pose: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },

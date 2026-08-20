@@ -5,6 +5,6 @@ export const robotControllerKey: InjectionKey<RobotController> = Symbol('robot-c
 
 export function useRobotController() {
   const controller = inject(robotControllerKey)
-  if (!controller) throw new Error('RobotController 未初始化')
+  if (!controller) throw new Error('RobotController is not initialized')
   return controller
 }

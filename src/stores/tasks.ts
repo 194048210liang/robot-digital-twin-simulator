@@ -15,6 +15,7 @@ import {
   type RobotTaskStatus,
   type RobotTaskStep,
 } from '@/robot/task'
+import type { TranslationDescriptor } from '@/robot/types'
 
 const STORAGE_KEY = 'robostation.robot-tasks.v1'
 
@@ -23,21 +24,23 @@ function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-function loadTasks() {
-  if (typeof localStorage === 'undefined') return { tasks: [] as RobotTask[], error: '' }
+function loadTasks(): { tasks: RobotTask[]; error: TranslationDescriptor | null } {
+  if (typeof localStorage === 'undefined') return { tasks: [], error: null }
   try {
     const serialized = localStorage.getItem(STORAGE_KEY)
-    if (!serialized) return { tasks: [] as RobotTask[], error: '' }
+    if (!serialized) return { tasks: [], error: null }
     const parsed: unknown = JSON.parse(serialized)
-    if (!Array.isArray(parsed)) throw new Error('任务数据格式无效')
+    if (!Array.isArray(parsed)) {
+      return { tasks: [], error: { key: 'task.storeErrors.invalidData' } }
+    }
     return {
       tasks: parsed.map(migrateStoredTask).filter((task): task is RobotTask => task !== null),
-      error: '',
+      error: null,
     }
-  } catch (error) {
+  } catch {
     return {
       tasks: [] as RobotTask[],
-      error: error instanceof Error ? error.message : '任务数据读取失败',
+      error: { key: 'task.storeErrors.readFailed' },
     }
   }
 }
@@ -60,7 +63,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
   const loaded = loadTasks()
   const tasks = ref<RobotTask[]>(loaded.tasks)
   const draftSteps = ref<RobotTaskStep[]>([])
-  const draftError = ref('')
+  const draftError = ref<TranslationDescriptor | null>(null)
   const persistenceError = ref(loaded.error)
   const runtime = ref<RobotTaskRuntime>(initialRuntime())
   const activeTask = computed(
@@ -71,30 +74,33 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
     if (typeof localStorage === 'undefined') return true
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(nextTasks))
-      persistenceError.value = ''
+      persistenceError.value = null
       return true
-    } catch (error) {
-      persistenceError.value = error instanceof Error ? error.message : '任务保存失败'
+    } catch {
+      persistenceError.value = { key: 'task.storeErrors.saveFailed' }
       return false
     }
   }
 
   function addDraftStep(targets: RobotTaskJointTarget[], speedScale: number) {
-    draftError.value = ''
+    draftError.value = null
     if (
       targets.length === 0 ||
       targets.some((target) => !target.jointId || !Number.isFinite(target.position))
     ) {
-      draftError.value = '当前姿态数据无效'
+      draftError.value = { key: 'task.storeErrors.invalidPose' }
       return null
     }
     if (draftSteps.value.length >= ROBOT_TASK_MAX_STEPS) {
-      draftError.value = `每个任务最多 ${ROBOT_TASK_MAX_STEPS} 个姿态`
+      draftError.value = {
+        key: 'task.storeErrors.maxPoses',
+        params: { count: ROBOT_TASK_MAX_STEPS },
+      }
       return null
     }
     const lastStep = draftSteps.value.at(-1)
     if (lastStep && isSameJointPose(lastStep.targets, targets)) {
-      draftError.value = '当前姿态与上一个姿态相同'
+      draftError.value = { key: 'task.storeErrors.duplicatePose' }
       return null
     }
     const step: RobotTaskStep = {
@@ -107,13 +113,13 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
   }
 
   function removeLastDraftStep() {
-    draftError.value = ''
+    draftError.value = null
     return draftSteps.value.pop() ?? null
   }
 
   function clearDraft() {
     draftSteps.value = []
-    draftError.value = ''
+    draftError.value = null
   }
 
   function createTask(input: CreateRobotTaskInput) {

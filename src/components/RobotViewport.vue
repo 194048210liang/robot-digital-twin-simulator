@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
   faCamera,
@@ -19,11 +20,13 @@ import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
 import { useTrajectoryStore } from '@/stores/trajectory'
 import { useValidationStore } from '@/stores/validation'
+import type { TranslationDescriptor } from '@/robot/types'
 
 const store = useRobotStore()
 const taskStore = useRobotTaskStore()
 const trajectory = useTrajectoryStore()
 const validation = useValidationStore()
+const { locale, t } = useI18n()
 const container = ref<HTMLElement>()
 const modelFilesInput = ref<HTMLInputElement>()
 const modelFolderInput = ref<HTMLInputElement>()
@@ -32,17 +35,22 @@ const autoRotating = ref(false)
 const gridVisible = ref(true)
 const modelLoading = ref(false)
 
+function translatedText(value: TranslationDescriptor) {
+  return t(value.key, value.params ?? {})
+}
+
 onMounted(async () => {
   if (!container.value) return
   scene.value = new RobotScene(container.value, {
     onFps: (fps) => (store.fps = fps),
+    translate: translatedText,
     onTcpState: (state) => {
       store.setTcpState(state)
       trajectory.sample(state, store.motionState === 'running')
       validation.sample(store.joints, state.pose, Math.max(0, taskStore.runtime.currentStepIndex))
     },
     onModelLoaded: (profile) => {
-      validation.finish('stopped', '模型已切换')
+      validation.finish('stopped', t('robot.messages.modelChanged'))
       store.setModelProfile(profile)
       taskStore.clearDraft()
       trajectory.clear()
@@ -50,24 +58,31 @@ onMounted(async () => {
         level: 'info',
         channel: 'communication',
         direction: 'SYS',
-        source: '模型',
+        source: 'MODEL',
         code: 'MOD-2001',
-        message: `URDF 加载成功：${profile.fileName}`,
-        details: `${profile.name} · ${profile.joints.length} 个可控关节${profile.tcpLinkName ? ` · TCP ${profile.tcpLinkName}` : ''}`,
-        status: '成功',
+        messageKey: 'robot.messages.modelLoadedLog',
+        messageParams: { fileName: profile.fileName },
+        detailsKey: 'robot.messages.modelLoadedDetails',
+        detailsParams: {
+          name: profile.name,
+          count: profile.joints.length,
+          tcp: profile.tcpLinkName ? ` · TCP ${profile.tcpLinkName}` : '',
+        },
+        status: 'SUCCESS',
       })
     },
-    onModelError: (message) => {
-      store.modelError = message
+    onModelError: (error) => {
+      store.modelError = error
       store.addLog({
         level: 'error',
         channel: 'alarm',
         direction: 'SYS',
-        source: '模型',
+        source: 'MODEL',
         code: 'MOD-5001',
-        message: 'URDF 模型加载失败',
-        details: message,
-        status: '错误',
+        messageKey: 'robot.messages.modelLoadError',
+        detailsKey: error.key,
+        detailsParams: error.params,
+        status: 'ERROR',
       })
     },
   })
@@ -84,7 +99,7 @@ onMounted(async () => {
     scene.value.setTrajectory(trajectory.points)
     scene.value.fitCamera()
   } catch {
-    // 错误已通过场景回调写入状态与日志。
+    // The scene callback has already reported the error to application state and logs.
   }
 })
 
@@ -92,6 +107,8 @@ watch(
   () => store.joints.map((joint) => joint.current),
   () => scene.value?.setJointValues(store.joints),
 )
+
+watch(locale, () => scene.value?.updateAccessibilityLabel())
 
 watch(
   () => trajectory.revision,
@@ -126,11 +143,12 @@ function clearTrajectory() {
     level: 'info',
     channel: 'command',
     direction: 'SYS',
-    source: '轨迹',
+    source: 'TRAJECTORY',
     code: 'TRAJECTORY-CLEAR',
-    message: '已清空 TCP 运动轨迹',
-    details: `移除 ${pointCount} 个轨迹点`,
-    status: '成功',
+    messageKey: 'robot.messages.trajectoryCleared',
+    detailsKey: 'robot.messages.trajectoryClearedDetails',
+    detailsParams: { count: pointCount },
+    status: 'SUCCESS',
   })
 }
 
@@ -148,20 +166,23 @@ async function importLocalModel(event: Event) {
   const wasLoaded = store.modelLoaded
   modelLoading.value = true
   store.modelLoaded = false
-  store.modelError = ''
+  store.modelError = null
   try {
     const profile = await scene.value.loadRobotFiles(files)
     scene.value.setJointValues(store.joints)
     scene.value.setTcpFrameVisible(trajectory.tcpFrameVisible)
     scene.value.setTrajectoryVisible(trajectory.trajectoryVisible)
     scene.value.setTrajectory(trajectory.points)
-    ElMessage.success(`已加载 ${profile.name}，解析 ${profile.joints.length} 个可控关节`)
-  } catch (error) {
+    ElMessage.success(
+      t('robot.messages.modelLoaded', { name: profile.name, count: profile.joints.length }),
+    )
+  } catch {
+    const message = store.modelError ? translatedText(store.modelError) : t('robot.modelLoadFailed')
     if (wasLoaded) {
       store.modelLoaded = true
-      store.modelError = ''
+      store.modelError = null
     }
-    ElMessage.error(error instanceof Error ? error.message : 'URDF 模型加载失败')
+    ElMessage.error(message)
   } finally {
     modelLoading.value = false
   }
@@ -171,7 +192,7 @@ async function importLocalModel(event: Event) {
 <template>
   <section class="viewport panel" aria-labelledby="viewport-title">
     <header class="panel-title">
-      <h2 id="viewport-title">3D 视图</h2>
+      <h2 id="viewport-title">{{ t('robot.viewport') }}</h2>
       <input
         ref="modelFilesInput"
         class="model-input"
@@ -195,85 +216,95 @@ async function importLocalModel(event: Event) {
           :disabled="store.motionState === 'running' || store.motionState === 'paused'"
         >
           <FontAwesomeIcon :icon="faFolderOpen" />
-          导入 URDF
+          {{ t('robot.importUrdf') }}
         </ElButton>
         <template #dropdown>
           <ElDropdownMenu>
-            <ElDropdownItem command="files">选择 URDF 及资源文件</ElDropdownItem>
-            <ElDropdownItem command="folder">选择模型文件夹</ElDropdownItem>
+            <ElDropdownItem command="files">{{ t('robot.chooseUrdfFiles') }}</ElDropdownItem>
+            <ElDropdownItem command="folder">{{ t('robot.chooseModelFolder') }}</ElDropdownItem>
           </ElDropdownMenu>
         </template>
       </ElDropdown>
     </header>
     <div ref="container" class="scene-host">
       <div v-if="!store.modelLoaded && !store.modelError" class="scene-notice">
-        <span class="spinner" />{{ modelLoading ? '正在解析 URDF…' : '正在加载默认 URDF…' }}
+        <span class="spinner" />{{
+          modelLoading ? t('robot.parsingUrdf') : t('robot.loadingDefaultUrdf')
+        }}
       </div>
       <div v-if="store.modelError" class="scene-notice error">
-        模型加载失败：{{ store.modelError }}
+        {{
+          t('robot.modelLoadFailedWithReason', {
+            reason: translatedText(store.modelError),
+          })
+        }}
       </div>
-      <ElButtonGroup class="viewport-tools" role="toolbar" aria-label="三维视图工具">
-        <ElTooltip content="适配模型" placement="bottom">
-          <ElButton aria-label="适配模型" @click="scene?.fitCamera()">
+      <ElButtonGroup class="viewport-tools" role="toolbar" :aria-label="t('robot.viewportAria')">
+        <ElTooltip :content="t('robot.fitModel')" placement="bottom">
+          <ElButton :aria-label="t('robot.fitModel')" @click="scene?.fitCamera()">
             <FontAwesomeIcon :icon="faHouse" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="全屏" placement="bottom">
-          <ElButton aria-label="全屏" @click="scene?.requestFullscreen()">
+        <ElTooltip :content="t('robot.fullscreen')" placement="bottom">
+          <ElButton :aria-label="t('robot.fullscreen')" @click="scene?.requestFullscreen()">
             <FontAwesomeIcon :icon="faCompress" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="自动旋转" placement="bottom">
+        <ElTooltip :content="t('robot.autoRotate')" placement="bottom">
           <ElButton
             :class="{ active: autoRotating }"
-            aria-label="自动旋转"
+            :aria-label="t('robot.autoRotate')"
             @click="toggleAutoRotate"
           >
             <FontAwesomeIcon :icon="faRotate" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="显示网格" placement="bottom">
-          <ElButton :class="{ active: gridVisible }" aria-label="显示网格" @click="toggleGrid">
+        <ElTooltip :content="t('robot.showGrid')" placement="bottom">
+          <ElButton
+            :class="{ active: gridVisible }"
+            :aria-label="t('robot.showGrid')"
+            @click="toggleGrid"
+          >
             <FontAwesomeIcon :icon="faTableCellsLarge" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="TCP 坐标系" placement="bottom">
+        <ElTooltip :content="t('robot.tcpFrame')" placement="bottom">
           <ElButton
             :class="{ active: trajectory.tcpFrameVisible }"
             :aria-pressed="trajectory.tcpFrameVisible"
-            aria-label="TCP 坐标系"
+            :aria-label="t('robot.tcpFrame')"
             @click="trajectory.toggleTcpFrame()"
           >
             <FontAwesomeIcon :icon="faCrosshairs" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="运动轨迹" placement="bottom">
+        <ElTooltip :content="t('robot.motionTrajectory')" placement="bottom">
           <ElButton
             :class="{ active: trajectory.trajectoryVisible }"
             :aria-pressed="trajectory.trajectoryVisible"
-            aria-label="运动轨迹"
+            :aria-label="t('robot.motionTrajectory')"
             @click="trajectory.toggleTrajectory()"
           >
             <FontAwesomeIcon :icon="faRoute" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="清空轨迹" placement="bottom">
+        <ElTooltip :content="t('robot.clearTrajectory')" placement="bottom">
           <ElButton
-            aria-label="清空轨迹"
+            :aria-label="t('robot.clearTrajectory')"
             :disabled="trajectory.pointCount === 0"
             @click="clearTrajectory"
           >
             <FontAwesomeIcon :icon="faEraser" />
           </ElButton>
         </ElTooltip>
-        <ElTooltip content="保存截图" placement="bottom">
-          <ElButton aria-label="保存截图" @click="scene?.downloadScreenshot()">
+        <ElTooltip :content="t('robot.saveScreenshot')" placement="bottom">
+          <ElButton :aria-label="t('robot.saveScreenshot')" @click="scene?.downloadScreenshot()">
             <FontAwesomeIcon :icon="faCamera" />
           </ElButton>
         </ElTooltip>
       </ElButtonGroup>
       <div v-if="trajectory.pointCount > 0" class="trajectory-status" aria-live="polite">
-        TCP 轨迹 {{ trajectory.pointCount }} 点
+        {{ t('robot.trajectoryPoints', { count: trajectory.pointCount }) }}
       </div>
       <div class="axis-legend" aria-hidden="true">
         <i class="z" /> <b>Z</b><i class="y" /> <b>Y</b><i class="x" /> <b>X</b>

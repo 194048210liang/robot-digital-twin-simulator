@@ -112,7 +112,7 @@ export function createRobotModelProfile(
   preferredTcpLinkName?: string,
 ): RobotModelProfile {
   return {
-    name: preferredName || robot.robotName || fileName.replace(/\.urdf$/i, '') || '未命名机器人',
+    name: preferredName || robot.robotName || fileName.replace(/\.urdf$/i, '') || 'robot',
     fileName,
     tcpLinkName: preferredTcpLinkName || findTcpLinkName(robot),
     joints: preferredJoints ?? createJointDefinitions(robot.joints),

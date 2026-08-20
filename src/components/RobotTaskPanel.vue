@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faFileImport } from '@fortawesome/free-solid-svg-icons'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useRobotTaskRunner } from '@/composables/useRobotTaskRunner'
 import {
   algorithmTrajectoryToTaskInput,
@@ -12,7 +13,7 @@ import {
   parseAlgorithmTrajectoryFile,
 } from '@/robot/algorithm-trajectory'
 import { toDisplayValue } from '@/robot/config'
-import { isSameJointPose, type RobotTask, type RobotTaskStatus } from '@/robot/task'
+import { isSameJointPose, type RobotTask } from '@/robot/task'
 import {
   createRobotTaskFile,
   getTaskCompatibilityError,
@@ -20,28 +21,24 @@ import {
 } from '@/robot/task-file'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
-import type { TcpPose } from '@/robot/types'
+import type { TcpPose, TranslationDescriptor } from '@/robot/types'
 import { downloadTextFile, sanitizeFileName } from '@/utils/download'
 
 const route = useRoute()
 const router = useRouter()
 const robotStore = useRobotStore()
 const taskStore = useRobotTaskStore()
+const { locale, t } = useI18n()
 const { canExecuteTask, executeTask: runTask } = useRobotTaskRunner()
 const playingTaskId = ref('')
 const taskFileInput = ref<HTMLInputElement>()
 const algorithmFileInput = ref<HTMLInputElement>()
 
-const statusLabels: Record<RobotTaskStatus, string> = {
-  idle: '待播放',
-  running: '播放中',
-  paused: '已暂停',
-  completed: '已完成',
-  stopped: '已停止',
-  error: '异常',
+function issueText(issue: TranslationDescriptor | null, fallbackKey: string) {
+  return issue ? t(issue.key, issue.params ?? {}) : t(fallbackKey)
 }
 
-const activeStatusLabel = computed(() => statusLabels[taskStore.runtime.status])
+const activeStatusLabel = computed(() => t(`task.statuses.${taskStore.runtime.status}`))
 const activeStatusType = computed(() => {
   const types = {
     idle: 'info',
@@ -61,21 +58,22 @@ async function playTask(task: RobotTask) {
   }))
   const onlyStep = task.steps.length === 1 ? task.steps[0] : undefined
   if (onlyStep && isSameJointPose(onlyStep.targets, currentPose)) {
-    ElMessage.info('机器人已在该任务的目标姿态，播放会直接完成')
+    ElMessage.info(t('task.messages.alreadyAtTarget'))
   }
 
   playingTaskId.value = task.id
   try {
     const accepted = await runTask(task)
-    if (!accepted) ElMessage.warning(taskStore.runtime.error || '机器人当前无法播放任务')
+    if (!accepted) ElMessage.warning(taskStore.runtime.error || t('task.messages.cannotPlay'))
   } finally {
     playingTaskId.value = ''
   }
 }
 
 function removeTask(task: RobotTask) {
-  if (taskStore.removeTask(task.id)) ElMessage.success(`任务“${task.name}”已删除`)
-  else ElMessage.warning(taskStore.persistenceError || '播放中的任务不能删除')
+  if (taskStore.removeTask(task.id))
+    ElMessage.success(t('task.messages.removed', { name: task.name }))
+  else ElMessage.warning(issueText(taskStore.persistenceError, 'task.messages.cannotRemovePlaying'))
 }
 
 function taskFile(task: RobotTask) {
@@ -93,7 +91,7 @@ function exportTask(task: RobotTask) {
     JSON.stringify(taskFile(task), null, 2),
     'application/json;charset=utf-8',
   )
-  ElMessage.success(`任务“${task.name}”已导出`)
+  ElMessage.success(t('task.messages.exported', { name: task.name }))
 }
 
 async function importTask(event: Event) {
@@ -105,18 +103,19 @@ async function importTask(event: Event) {
   try {
     const parsed: unknown = JSON.parse(await file.text())
     const taskDocument = parseRobotTaskFile(parsed)
-    if (!taskDocument) throw new Error('不是有效的 RoboStation 任务文件')
+    if (!taskDocument) throw new Error(t('task.messages.invalidTaskFile'))
     const compatibilityError = getTaskCompatibilityError(
       taskDocument,
       robotStore.joints,
       robotStore.tcpState.sourceLink,
     )
-    if (compatibilityError) throw new Error(compatibilityError)
+    if (compatibilityError)
+      throw new Error(issueText(compatibilityError, 'task.messages.importFailed'))
     const task = taskStore.importTask(taskDocument.task)
-    if (!task) throw new Error(taskStore.persistenceError || '任务导入失败')
-    ElMessage.success(`任务“${task.name}”已导入`)
+    if (!task) throw new Error(issueText(taskStore.persistenceError, 'task.messages.importFailed'))
+    ElMessage.success(t('task.messages.imported', { name: task.name }))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '任务文件读取失败')
+    ElMessage.error(error instanceof Error ? error.message : t('task.messages.readFailed'))
   }
 }
 
@@ -128,13 +127,15 @@ function downloadAlgorithmTemplate() {
     joints: robotStore.joints,
     tcpPose: robotStore.tcpPose,
     speedScale: robotStore.speedScale,
+    name: t('task.template.name', { model: robotStore.modelName }),
+    description: t('task.template.description'),
   })
   downloadTextFile(
     `${sanitizeFileName(robotStore.modelName) || 'robot'}.algorithm-trajectory.json`,
     JSON.stringify(template, null, 2),
     'application/json;charset=utf-8',
   )
-  ElMessage.success('已下载当前模型的算法结果模板')
+  ElMessage.success(t('task.messages.templateDownloaded'))
 }
 
 async function importAlgorithmTrajectory(event: Event) {
@@ -146,18 +147,19 @@ async function importAlgorithmTrajectory(event: Event) {
   try {
     const parsed: unknown = JSON.parse(await file.text())
     const document = parseAlgorithmTrajectoryFile(parsed)
-    if (!document) throw new Error('不是有效的 RoboStation 外部算法结果文件')
+    if (!document) throw new Error(t('task.messages.invalidAlgorithmFile'))
     const compatibilityError = getAlgorithmTrajectoryCompatibilityError(
       document,
       robotStore.joints,
       robotStore.tcpState.sourceLink,
     )
-    if (compatibilityError) throw new Error(compatibilityError)
+    if (compatibilityError)
+      throw new Error(issueText(compatibilityError, 'task.messages.convertFailed'))
     const task = taskStore.createTask(algorithmTrajectoryToTaskInput(document, robotStore.joints))
-    if (!task) throw new Error(taskStore.persistenceError || '算法结果转换任务失败')
-    ElMessage.success(`算法结果已转换为任务“${task.name}”`)
+    if (!task) throw new Error(issueText(taskStore.persistenceError, 'task.messages.convertFailed'))
+    ElMessage.success(t('task.messages.converted', { name: task.name }))
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '算法结果文件读取失败')
+    ElMessage.error(error instanceof Error ? error.message : t('task.messages.algorithmReadFailed'))
   }
 }
 
@@ -168,7 +170,7 @@ function goToJointControl() {
 }
 
 function formatDate(timestamp: number) {
-  return new Date(timestamp).toLocaleString('zh-CN', { hour12: false })
+  return new Date(timestamp).toLocaleString(locale.value, { hour12: false })
 }
 
 function formatDuration(milliseconds: number) {
@@ -207,12 +209,12 @@ function formatTcpTarget(pose: TcpPose) {
         @change="importAlgorithmTrajectory"
       />
       <div>
-        <h3>任务编排</h3>
-        <p>支持示教任务，也可导入外部算法的目标 TCP 与关节解进行验证。</p>
+        <h3>{{ t('task.title') }}</h3>
+        <p>{{ t('task.guide') }}</p>
       </div>
       <div class="guide-actions">
         <ElButton @click="taskFileInput?.click()">
-          <FontAwesomeIcon :icon="faFileImport" />导入任务
+          <FontAwesomeIcon :icon="faFileImport" />{{ t('task.importTask') }}
         </ElButton>
         <ElDropdown
           split-button
@@ -222,21 +224,21 @@ function formatTcpTarget(pose: TcpPose) {
           @click="algorithmFileInput?.click()"
           @command="downloadAlgorithmTemplate"
         >
-          导入算法结果
+          {{ t('task.importTrajectory') }}
           <template #dropdown>
             <ElDropdownMenu>
-              <ElDropdownItem command="template">下载当前模型模板</ElDropdownItem>
+              <ElDropdownItem command="template">{{ t('task.downloadTemplate') }}</ElDropdownItem>
             </ElDropdownMenu>
           </template>
         </ElDropdown>
-        <ElButton plain @click="goToJointControl">前往关节示教</ElButton>
+        <ElButton plain @click="goToJointControl">{{ t('task.goToTeaching') }}</ElButton>
       </div>
     </section>
 
     <section class="task-list">
       <div class="section-title">
-        <h3>已保存任务</h3>
-        <span>{{ taskStore.tasks.length }} 个</span>
+        <h3>{{ t('task.savedTasks') }}</h3>
+        <span>{{ t('task.taskCount', { count: taskStore.tasks.length }) }}</span>
       </div>
       <ElTable
         v-if="taskStore.tasks.length"
@@ -253,8 +255,8 @@ function formatTcpTarget(pose: TcpPose) {
               <div v-for="(step, index) in row.steps" :key="step.id" class="step-item">
                 <span class="step-index">{{ index + 1 }}</span>
                 <div class="step-meta">
-                  <strong>姿态 {{ index + 1 }}</strong>
-                  <small>速度 {{ Math.round(step.speedScale * 100) }}%</small>
+                  <strong>{{ t('task.poseIndex', { index: index + 1 }) }}</strong>
+                  <small>{{ t('task.speed', { value: Math.round(step.speedScale * 100) }) }}</small>
                 </div>
                 <div class="step-targets">
                   <strong v-if="step.targetTcpPose" class="step-tcp">
@@ -268,14 +270,19 @@ function formatTcpTarget(pose: TcpPose) {
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="name" label="任务名称" min-width="142" show-overflow-tooltip />
-        <ElTableColumn label="姿态" width="62" align="center">
+        <ElTableColumn
+          prop="name"
+          :label="t('task.taskName')"
+          min-width="142"
+          show-overflow-tooltip
+        />
+        <ElTableColumn :label="t('task.pose')" width="62" align="center">
           <template #default="{ row }">{{ row.steps.length }}</template>
         </ElTableColumn>
-        <ElTableColumn label="保存时间" min-width="148">
+        <ElTableColumn :label="t('task.savedAt')" min-width="148">
           <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
         </ElTableColumn>
-        <ElTableColumn label="状态" width="78" align="center">
+        <ElTableColumn :label="t('common.status')" width="78" align="center">
           <template #default="{ row }">
             <ElTag
               v-if="taskStore.runtime.activeTaskId === row.id"
@@ -285,30 +292,30 @@ function formatTcpTarget(pose: TcpPose) {
             >
               {{ activeStatusLabel }}
             </ElTag>
-            <span v-else>待播放</span>
+            <span v-else>{{ t('task.statuses.idle') }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="202" align="center">
+        <ElTableColumn :label="t('common.operation')" width="202" align="center">
           <template #default="{ row }">
             <ElButton
               type="primary"
               link
               :loading="playingTaskId === row.id"
               :disabled="!canExecuteTask"
-              :aria-label="`播放任务 ${row.name}`"
+              :aria-label="t('task.playTaskAria', { name: row.name })"
               @click="playTask(row)"
             >
-              播放
+              {{ t('task.play') }}
             </ElButton>
             <ElButton
               type="primary"
               link
-              :aria-label="`导出任务 ${row.name}`"
+              :aria-label="t('task.exportTaskAria', { name: row.name })"
               @click="exportTask(row)"
             >
-              导出
+              {{ t('task.export') }}
             </ElButton>
-            <ElPopconfirm title="确定删除这个任务？" @confirm="removeTask(row)">
+            <ElPopconfirm :title="t('task.deleteConfirm')" @confirm="removeTask(row)">
               <template #reference>
                 <ElButton
                   type="danger"
@@ -318,30 +325,32 @@ function formatTcpTarget(pose: TcpPose) {
                     (taskStore.runtime.status === 'running' ||
                       taskStore.runtime.status === 'paused')
                   "
-                  :aria-label="`删除任务 ${row.name}`"
+                  :aria-label="t('task.deleteTaskAria', { name: row.name })"
                 >
-                  删除
+                  {{ t('task.delete') }}
                 </ElButton>
               </template>
             </ElPopconfirm>
           </template>
         </ElTableColumn>
       </ElTable>
-      <ElEmpty v-else description="暂无任务，请先到关节示教添加姿态并保存" :image-size="54">
-        <ElButton type="primary" plain @click="goToJointControl">前往关节示教</ElButton>
+      <ElEmpty v-else :description="t('task.empty')" :image-size="54">
+        <ElButton type="primary" plain @click="goToJointControl">
+          {{ t('task.goToTeaching') }}
+        </ElButton>
       </ElEmpty>
     </section>
 
     <section class="task-monitor">
       <div class="monitor-head">
         <div>
-          <span>播放监控</span>
-          <strong>{{ taskStore.activeTask?.name ?? '尚未播放任务' }}</strong>
+          <span>{{ t('task.monitor') }}</span>
+          <strong>{{ taskStore.activeTask?.name ?? t('task.notPlayed') }}</strong>
         </div>
         <ElTag :type="activeStatusType" effect="plain">{{ activeStatusLabel }}</ElTag>
       </div>
       <div class="monitor-progress">
-        <span>总进度</span>
+        <span>{{ t('task.totalProgress') }}</span>
         <ElProgress
           :percentage="Math.round(taskStore.runtime.progress)"
           :stroke-width="6"
@@ -350,7 +359,7 @@ function formatTcpTarget(pose: TcpPose) {
       </div>
       <dl>
         <div>
-          <dt>当前姿态</dt>
+          <dt>{{ t('task.currentPose') }}</dt>
           <dd v-if="taskStore.activeTask">
             {{ Math.min(taskStore.runtime.currentStepIndex + 1, taskStore.runtime.totalSteps) }} /
             {{ taskStore.runtime.totalSteps }}
@@ -358,12 +367,12 @@ function formatTcpTarget(pose: TcpPose) {
           <dd v-else>—</dd>
         </div>
         <div>
-          <dt>已用时</dt>
+          <dt>{{ t('task.elapsed') }}</dt>
           <dd>{{ formatDuration(taskStore.runtime.elapsedMs) }}</dd>
         </div>
         <div>
-          <dt>控制</dt>
-          <dd>使用下方按钮</dd>
+          <dt>{{ t('task.control') }}</dt>
+          <dd>{{ t('task.controlHint') }}</dd>
         </div>
       </dl>
       <p v-if="taskStore.runtime.error" class="task-error">{{ taskStore.runtime.error }}</p>

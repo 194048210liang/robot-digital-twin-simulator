@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   calculateSequenceProgress,
   calculateTaskProgress,
@@ -15,6 +16,7 @@ import { useValidationStore } from '@/stores/validation'
 const ACTIVE_STATUSES = new Set<RobotTaskStatus>(['running', 'paused'])
 
 export function useRobotTaskRunner() {
+  const { t } = useI18n()
   const robotStore = useRobotStore()
   const taskStore = useRobotTaskStore()
   const trajectoryStore = useTrajectoryStore()
@@ -43,7 +45,10 @@ export function useRobotTaskRunner() {
       for (const target of step.targets) {
         const joint = robotStore.findJoint(target.jointId)
         if (!joint || !isTargetWithinLimits(target.position, joint.min, joint.max)) {
-          taskStore.failTask(task.id, `任务包含无效关节目标：${target.jointId}`)
+          taskStore.failTask(
+            task.id,
+            t('task.messages.invalidJointTarget', { jointId: target.jointId }),
+          )
           return false
         }
       }
@@ -59,20 +64,23 @@ export function useRobotTaskRunner() {
       level: passed ? 'info' : 'warning',
       channel: passed ? 'command' : 'alarm',
       direction: 'SYS',
-      source: '验证',
+      source: 'VALIDATION',
       code: passed ? 'VALIDATION-PASS' : 'VALIDATION-INCOMPLETE',
-      message: passed
-        ? `任务“${record.taskName}”仿真验证通过`
-        : `任务“${record.taskName}”验证未通过`,
-      details: `${record.summary.sampleCount} 个样本 · TCP ${record.summary.tcpPathLength.toFixed(3)} m`,
-      status: passed ? '成功' : '警告',
+      messageKey: passed ? 'validation.messages.passed' : 'validation.messages.failed',
+      messageParams: { name: record.taskName },
+      detailsKey: 'validation.messages.summary',
+      detailsParams: {
+        samples: record.summary.sampleCount,
+        path: record.summary.tcpPathLength.toFixed(3),
+      },
+      status: passed ? 'SUCCESS' : 'WARNING',
     })
   }
 
   async function startStep(task: RobotTask, stepIndex: number) {
     const step = task.steps[stepIndex]
     if (!step) {
-      taskStore.failTask(task.id, '任务步骤不存在')
+      taskStore.failTask(task.id, t('task.messages.missingStep'))
       return false
     }
 
@@ -130,7 +138,7 @@ export function useRobotTaskRunner() {
 
     const step = task.steps[runtime.currentStepIndex]
     if (!step) {
-      taskStore.failTask(task.id, '当前任务步骤无效')
+      taskStore.failTask(task.id, t('task.messages.invalidCurrentStep'))
       return
     }
 
@@ -150,8 +158,9 @@ export function useRobotTaskRunner() {
       taskStore.updateRuntime('stopped', progress, elapsedMs)
       finishValidation('stopped')
     } else if (robotStore.motionState === 'error') {
-      taskStore.updateRuntime('error', progress, elapsedMs, '机器人运动状态异常')
-      finishValidation('error', '机器人运动状态异常')
+      const error = t('task.messages.motionStateError')
+      taskStore.updateRuntime('error', progress, elapsedMs, error)
+      finishValidation('error', error)
     } else if (robotStore.motionState === 'idle') {
       taskStore.updateRuntime('running', progress, elapsedMs)
       queueStepCompletion(task, runtime.currentStepIndex)
@@ -177,11 +186,13 @@ export function useRobotTaskRunner() {
       level: 'info',
       channel: 'command',
       direction: 'SYS',
-      source: '验证',
+      source: 'VALIDATION',
       code: 'VALIDATION-START',
-      message: `开始记录任务“${task.name}”的仿真数据`,
-      details: `${task.steps.length} 个姿态 · ${robotStore.joints.length} 个关节`,
-      status: '成功',
+      messageKey: 'validation.messages.started',
+      messageParams: { name: task.name },
+      detailsKey: 'validation.messages.startedDetails',
+      detailsParams: { poses: task.steps.length, joints: robotStore.joints.length },
+      status: 'SUCCESS',
     })
     taskStore.startTask(task.id, task.steps.length, positions)
     return startStep(task, 0)

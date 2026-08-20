@@ -2,13 +2,6 @@ import type { JointDefinition, JointGroup } from './types'
 
 const DEG = Math.PI / 180
 
-export const jointGroupLabels: Record<JointGroup, string> = {
-  torso: '躯干',
-  arm: '机械臂',
-  head: '头部',
-  gripper: '夹爪',
-}
-
 export const jointDefinitions: JointDefinition[] = [
   {
     id: 'torso_lift_joint',

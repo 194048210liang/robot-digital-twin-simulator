@@ -4,8 +4,10 @@ import { RobotController } from '@/robot/robot-controller'
 import { RobotSimulator } from '@/robot/robot-simulator'
 import { useRobotStore } from '@/stores/robot'
 import { MockTransport } from '@/transport/mock-transport'
+import { useI18n } from 'vue-i18n'
 
 export function useRobotWorkstation() {
+  const { locale } = useI18n()
   const store = useRobotStore()
   const simulator = new RobotSimulator(store)
   const controller = new RobotController(store, new MockTransport(), simulator)
@@ -21,7 +23,7 @@ export function useRobotWorkstation() {
       String(date.getMonth() + 1).padStart(2, '0'),
       String(date.getDate()).padStart(2, '0'),
     ].join('-')
-    return `${ymd} ${date.toLocaleTimeString('zh-CN', { hour12: false })}`
+    return `${ymd} ${date.toLocaleTimeString(locale.value, { hour12: false })}`
   })
 
   onMounted(() => {
@@ -30,22 +32,24 @@ export function useRobotWorkstation() {
       level: 'info',
       channel: 'communication',
       direction: 'SYS',
-      source: '仿真',
+      source: 'SIMULATION',
       code: 'SIM-4001',
-      message: '仿真环境初始化完成',
-      details: '控制周期 20 ms',
-      status: '成功',
+      messageKey: 'robot.messages.environmentReady',
+      detailsKey: 'robot.messages.controlCycle',
+      detailsParams: { value: 20 },
+      status: 'SUCCESS',
     })
     store.addLog({
       level: 'info',
       channel: 'communication',
       direction: 'RX',
-      source: '状态',
+      source: 'STATE',
       code: 'JOINT-STATE',
-      message: '全量关节状态同步完成',
-      details: `${store.joints.length} 个控制关节`,
+      messageKey: 'robot.messages.jointStateSynced',
+      detailsKey: 'robot.messages.controlledJointCount',
+      detailsParams: { count: store.joints.length },
       latency: 20,
-      status: '成功',
+      status: 'SUCCESS',
     })
     void controller.connect()
     clockTimer = window.setInterval(() => (now.value = new Date()), 1000)

@@ -69,11 +69,11 @@ export class RobotSimulator {
           level: 'info',
           channel: 'command',
           direction: 'RX',
-          source: '仿真器',
+          source: 'SIMULATOR',
           code: 'MOTION-COMPLETE',
-          message: '目标位置已到达',
-          details: '全部关节跟随完成',
-          status: '成功',
+          messageKey: 'robot.messages.targetReached',
+          detailsKey: 'robot.messages.allJointsReached',
+          status: 'SUCCESS',
         })
       }
     } else {

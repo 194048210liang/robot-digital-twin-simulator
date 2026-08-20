@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { TableColumnCtx } from 'element-plus'
-import { jointGroupLabels, toDisplayValue, toInternalValue } from '@/robot/config'
+import { useI18n } from 'vue-i18n'
+import { toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
 import type { JointGroup, JointState } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
@@ -9,7 +10,6 @@ import { useRobotStore } from '@/stores/robot'
 interface JointTableRow {
   joint: JointState
   group: JointGroup
-  groupLabel: string
   showGroup: boolean
   span: number
 }
@@ -23,6 +23,7 @@ interface SpanMethodProps {
 
 const store = useRobotStore()
 const controller = useRobotController()
+const { t } = useI18n()
 const groups: JointGroup[] = ['torso', 'arm', 'head', 'gripper']
 const selected = computed(() => store.selectedJoint)
 
@@ -32,7 +33,6 @@ const rows = computed<JointTableRow[]>(() =>
     return joints.map((joint, index) => ({
       joint,
       group,
-      groupLabel: jointGroupLabels[group],
       showGroup: index === 0,
       span: joints.length,
     }))
@@ -68,12 +68,16 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
   if (columnIndex !== 0) return [1, 1]
   return row.showGroup ? [row.span, 1] : [0, 0]
 }
+
+function groupLabel(group?: JointGroup) {
+  return group ? t(`joint.groups.${group}`) : t('common.none')
+}
 </script>
 
 <template>
   <div class="tcp-panel">
     <section class="tcp-card">
-      <h3>TCP 位置</h3>
+      <h3>{{ t('tcp.position') }}</h3>
       <div class="pose-grid">
         <div v-for="axis in ['x', 'y', 'z', 'rx', 'ry', 'rz'] as const" :key="axis">
           <span>{{ axis.toUpperCase() }} {{ axis.length === 1 ? '(mm)' : '(°)' }}</span>
@@ -87,7 +91,7 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
     </section>
 
     <section class="status-card">
-      <h3>关节状态</h3>
+      <h3>{{ t('joint.status') }}</h3>
       <div class="table-scroll">
         <ElTable
           class="joint-status-table adaptive-table"
@@ -101,31 +105,33 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           height="100%"
           @row-click="selectJoint"
         >
-          <ElTableColumn label="分组" width="70" align="center">
+          <ElTableColumn :label="t('joint.group')" width="70" align="center">
             <template #default="{ row }">
-              <span class="group-cell">{{ row.groupLabel }}</span>
+              <span class="group-cell">{{ groupLabel(row.group) }}</span>
             </template>
           </ElTableColumn>
-          <ElTableColumn label="关节名称" min-width="128" align="center">
+          <ElTableColumn :label="t('joint.name')" min-width="128" align="center">
             <template #default="{ row }">{{ row.joint.displayName }}</template>
           </ElTableColumn>
-          <ElTableColumn label="当前值" min-width="104" align="center">
+          <ElTableColumn :label="t('common.currentValue')" min-width="104" align="center">
             <template #default="{ row }">
               {{ display(row.joint, row.joint.current) }} {{ row.joint.displayUnit }}
             </template>
           </ElTableColumn>
-          <ElTableColumn label="目标值" min-width="104" align="center">
+          <ElTableColumn :label="t('common.targetValue')" min-width="104" align="center">
             <template #default="{ row }">
               {{ display(row.joint, row.joint.target) }} {{ row.joint.displayUnit }}
             </template>
           </ElTableColumn>
-          <ElTableColumn label="速度" width="72" align="center">
+          <ElTableColumn :label="t('joint.velocity')" width="72" align="center">
             <template #default="{ row }">
               {{ Math.abs(toDisplayValue(row.joint, row.joint.velocity)).toFixed(2) }}
             </template>
           </ElTableColumn>
-          <ElTableColumn label="限位状态" width="82" align="center">
-            <template #default><span class="normal">正常</span></template>
+          <ElTableColumn :label="t('joint.limitStatus')" width="82" align="center">
+            <template #default>
+              <span class="normal">{{ t('status.NORMAL') }}</span>
+            </template>
           </ElTableColumn>
         </ElTable>
       </div>
@@ -134,12 +140,12 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
     <section v-if="selected" class="quick-control">
       <div class="quick-title">
         <strong>{{ selected.displayName }}</strong>
-        <small>关节目标</small>
+        <small>{{ t('joint.jointTarget') }}</small>
       </div>
       <div class="jog-control">
         <ElButton
           class="jog-button"
-          aria-label="减小目标值"
+          :aria-label="t('joint.decreaseTarget')"
           @click="controller.jogJoint(selected.id, -1 / selected.displayScale)"
         >
           −
@@ -151,19 +157,19 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           :max="selected.max"
           :step="selected.kind === 'prismatic' || selected.kind === 'virtual' ? 0.001 : 0.01"
           :show-tooltip="false"
-          :aria-label="`${selected.displayName} 目标值`"
+          :aria-label="t('joint.targetValueAria', { name: selected.displayName })"
           @input="setJointTarget(selected, $event)"
         />
         <ElButton
           class="jog-button"
-          aria-label="增大目标值"
+          :aria-label="t('joint.increaseTarget')"
           @click="controller.jogJoint(selected.id, 1 / selected.displayScale)"
         >
           ＋
         </ElButton>
       </div>
       <label class="target-input">
-        <span>目标值</span>
+        <span>{{ t('common.targetValue') }}</span>
         <ElInputNumber
           size="small"
           :model-value="Number(display(selected, selected.target))"
@@ -171,13 +177,13 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           :max="Number(display(selected, selected.max))"
           :precision="selected.displayDecimals"
           :controls="false"
-          :aria-label="`${selected.displayName} 目标数值`"
+          :aria-label="t('joint.targetNumberAria', { name: selected.displayName })"
           @change="setFromDisplay(selected, $event)"
         />
       </label>
       <div class="speed-input">
         <div>
-          <span>速度 ({{ selected.displayUnit }}/s)</span>
+          <span>{{ t('joint.speed', { unit: selected.displayUnit }) }}</span>
           <strong>{{
             Math.abs(toDisplayValue(selected, selected.maxVelocity * store.speedScale)).toFixed(1)
           }}</strong>
@@ -189,29 +195,29 @@ function spanMethod({ row, columnIndex }: SpanMethodProps) {
           :max="1"
           :step="0.05"
           :show-tooltip="false"
-          aria-label="速度倍率"
+          :aria-label="t('joint.speedScale')"
           @input="setSpeedScale"
         />
       </div>
     </section>
 
     <section class="controller-card">
-      <h3>仿真控制器状态</h3>
+      <h3>{{ t('tcp.controllerStatus') }}</h3>
       <dl>
         <div>
-          <dt>连接状态</dt>
-          <dd class="normal">● Mock 已连接</dd>
+          <dt>{{ t('tcp.connectionStatus') }}</dt>
+          <dd class="normal">{{ t('tcp.mockConnected') }}</dd>
         </div>
         <div>
-          <dt>反馈周期</dt>
+          <dt>{{ t('tcp.feedbackCycle') }}</dt>
           <dd>20 ms</dd>
         </div>
         <div>
-          <dt>通信延迟</dt>
+          <dt>{{ t('tcp.communicationLatency') }}</dt>
           <dd>1.2 ms</dd>
         </div>
         <div>
-          <dt>丢包率</dt>
+          <dt>{{ t('tcp.packetLoss') }}</dt>
           <dd>0 %</dd>
         </div>
       </dl>

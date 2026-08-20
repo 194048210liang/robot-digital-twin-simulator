@@ -5,7 +5,7 @@ import {
   type CreateRobotTaskInput,
 } from './task'
 import { createJointSignature } from './task-file'
-import type { JointState, TcpPose } from './types'
+import type { JointState, TcpPose, TranslationDescriptor } from './types'
 
 export const ALGORITHM_TRAJECTORY_FORMAT = 'robostation-algorithm-trajectory'
 export const ALGORITHM_TRAJECTORY_VERSION = 1
@@ -45,6 +45,8 @@ interface CreateTemplateOptions {
   joints: JointState[]
   tcpPose: TcpPose
   speedScale: number
+  name?: string
+  description?: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -83,8 +85,13 @@ export function createAlgorithmTrajectoryTemplate(
     format: ALGORITHM_TRAJECTORY_FORMAT,
     version: ALGORITHM_TRAJECTORY_VERSION,
     generatedAt: new Date().toISOString(),
-    name: `${options.modelName} 外部算法轨迹`.slice(0, ROBOT_TASK_NAME_MAX_LENGTH),
-    description: '将目标 TCP 位姿和外部算法求得的关节解一起导入 RoboStation 验证。',
+    name: (options.name || `${options.modelName} Algorithm Trajectory`).slice(
+      0,
+      ROBOT_TASK_NAME_MAX_LENGTH,
+    ),
+    description:
+      options.description ||
+      'Import target TCP poses and joint solutions from an external algorithm for validation.',
     units: {
       revolute: 'rad',
       prismatic: 'm',
@@ -146,12 +153,15 @@ export function getAlgorithmTrajectoryCompatibilityError(
   file: AlgorithmTrajectoryFile,
   joints: JointState[],
   tcpLinkName: string,
-) {
+): TranslationDescriptor | null {
   if (file.model.tcpLinkName !== tcpLinkName) {
-    return `TCP Link 不一致：文件为 ${file.model.tcpLinkName || '空'}，当前模型为 ${tcpLinkName || '空'}`
+    return {
+      key: 'task.fileErrors.trajectoryTcpMismatch',
+      params: { file: file.model.tcpLinkName || '—', current: tcpLinkName || '—' },
+    }
   }
   if (file.model.jointSignature !== createJointSignature(joints)) {
-    return '算法轨迹的关节 ID、类型或限位与当前模型不一致'
+    return { key: 'task.fileErrors.trajectoryModelMismatch' }
   }
 
   const expectedIds = new Set(joints.map((joint) => joint.id))
@@ -163,19 +173,28 @@ export function getAlgorithmTrajectoryCompatibilityError(
       .filter((jointId) => !Object.prototype.hasOwnProperty.call(point.joints, jointId))
     const unknownIds = actualIds.filter((jointId) => !expectedIds.has(jointId))
     if (missingIds.length) {
-      return `轨迹点 ${pointIndex + 1} 缺少关节解：${missingIds.join('、')}`
+      return {
+        key: 'task.fileErrors.missingSolutions',
+        params: { point: pointIndex + 1, joints: missingIds.join(', ') },
+      }
     }
     if (unknownIds.length) {
-      return `轨迹点 ${pointIndex + 1} 包含未知关节：${unknownIds.join('、')}`
+      return {
+        key: 'task.fileErrors.unknownJoints',
+        params: { point: pointIndex + 1, joints: unknownIds.join(', ') },
+      }
     }
     for (const joint of joints) {
       const position = point.joints[joint.id]!
       if (position < joint.min - 0.000001 || position > joint.max + 0.000001) {
-        return `轨迹点 ${pointIndex + 1} 的关节 ${joint.displayName} 超出 URDF 限位`
+        return {
+          key: 'task.fileErrors.outOfLimit',
+          params: { point: pointIndex + 1, joint: joint.displayName },
+        }
       }
     }
   }
-  return ''
+  return null
 }
 
 export function algorithmTrajectoryToTaskInput(

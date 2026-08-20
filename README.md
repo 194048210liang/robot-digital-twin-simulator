@@ -26,6 +26,18 @@ JSON / CSV 数据导出
 
 项目内置 Fetch 移动操作机器人作为示例，同时支持导入本地 URDF 及其 Mesh、纹理资源，并根据模型自动生成可控关节、限位和显示单位。
 
+## 界面预览
+
+<p align="center">
+  <img src="./docs/assets/robostation-validation-workbench.png" alt="RoboStation 仿真验证工作台" width="100%" />
+</p>
+
+<p align="center">
+  <sub>在同一工作区完成 URDF 三维预览、任务执行监控、验证指标检查以及 JSON / CSV 结果导出。</sub>
+</p>
+
+> **验证闭环：** 任务执行后保留关节状态、TCP 轨迹、限位检查和误差统计，让仿真结果可以查看、复现并导出。
+
 ## 核心价值
 
 - **通用模型输入**：加载本地 URDF 资源包，解析可控关节、关节类型、限位、速度和末端 Link。
@@ -154,10 +166,12 @@ npm run build
 
 ## 相关文档
 
-- [外部算法轨迹格式](./docs/ALGORITHM_TRAJECTORY.md)
-- [IK 接口与接入方案](./docs/IK_DESIGN.md)
-- [项目规划与范围](./PROJECT_PLAN.md)
-- [第三方资源说明](./THIRD_PARTY_NOTICES.md)
+| 文档              | 中文                                   | English                                   | 内容                                   |
+| ----------------- | -------------------------------------- | ----------------------------------------- | -------------------------------------- |
+| 外部算法轨迹格式  | [阅读](./docs/ALGORITHM_TRAJECTORY.md) | [Read](./docs/ALGORITHM_TRAJECTORY.en.md) | 算法结果文件结构、单位、校验与验证输出 |
+| IK 接口与接入方案 | [阅读](./docs/IK_DESIGN.md)            | [Read](./docs/IK_DESIGN.en.md)            | IK Provider 边界、接口链路与失败模型   |
+| 项目规划与范围    | [阅读](./PROJECT_PLAN.md)              | [Read](./PROJECT_PLAN.en.md)              | 产品目标、架构、版本范围与已知风险     |
+| 第三方资源说明    | [阅读](./THIRD_PARTY_NOTICES.md)       | [Read](./THIRD_PARTY_NOTICES.en.md)       | 模型资源的来源与再分发注意事项         |
 
 完整操作手册将在工作流稳定后单独整理，不在当前 README 中展开。
 

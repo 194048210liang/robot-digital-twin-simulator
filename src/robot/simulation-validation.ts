@@ -1,6 +1,6 @@
 import { Euler, MathUtils, Quaternion } from 'three'
 import type { RobotTask, RobotTaskStatus } from './task'
-import type { JointState, TcpPose } from './types'
+import type { JointState, TcpPose, TranslationDescriptor } from './types'
 
 export const SIMULATION_RECORD_FORMAT = 'robostation-simulation-record'
 export const SIMULATION_RECORD_VERSION = 1
@@ -42,10 +42,10 @@ export interface SimulationValidationCheck {
     | 'tcp-waypoint-coverage'
     | 'tcp-position-error'
     | 'tcp-orientation-error'
-  name: string
-  description: string
-  expected: string
-  actual: string
+  name: TranslationDescriptor
+  description: TranslationDescriptor
+  expected: TranslationDescriptor
+  actual: TranslationDescriptor
   passed: boolean
 }
 
@@ -221,34 +221,52 @@ export function buildSimulationValidation(
   const checks: SimulationValidationCheck[] = [
     {
       id: 'task-completion',
-      name: '任务执行完成',
-      description: '任务序列是否完整播放至最后一个姿态',
-      expected: '已完成',
-      actual: completed ? '已完成' : status === 'error' ? '异常' : '未完成',
+      name: { key: 'validation.checks.taskCompletion.name' },
+      description: { key: 'validation.checks.taskCompletion.description' },
+      expected: { key: 'validation.checks.taskCompletion.expected' },
+      actual: {
+        key: completed
+          ? 'validation.checks.taskCompletion.actualCompleted'
+          : status === 'error'
+            ? 'validation.checks.taskCompletion.actualError'
+            : 'validation.checks.taskCompletion.actualIncomplete',
+      },
       passed: completed,
     },
     {
       id: 'position-limit',
-      name: '关节位置限位',
-      description: '采样位置是否位于 URDF 关节限位范围内',
-      expected: '0 次越限',
-      actual: `${positionViolationCount} 次越限`,
+      name: { key: 'validation.checks.positionLimit.name' },
+      description: { key: 'validation.checks.positionLimit.description' },
+      expected: { key: 'validation.checks.positionLimit.expected' },
+      actual: {
+        key: 'validation.checks.positionLimit.actual',
+        params: { count: positionViolationCount },
+      },
       passed: positionViolationCount === 0,
     },
     {
       id: 'velocity-limit',
-      name: '关节速度限位',
-      description: '采样速度是否低于模型关节最大速度',
-      expected: '0 次超速',
-      actual: `${velocityViolationCount} 次超速`,
+      name: { key: 'validation.checks.velocityLimit.name' },
+      description: { key: 'validation.checks.velocityLimit.description' },
+      expected: { key: 'validation.checks.velocityLimit.expected' },
+      actual: {
+        key: 'validation.checks.velocityLimit.actual',
+        params: { count: velocityViolationCount },
+      },
       passed: velocityViolationCount === 0,
     },
     {
       id: 'sample-continuity',
-      name: '采样连续性',
-      description: '相邻样本间隔是否不超过 250 ms',
-      expected: '≤ 250 ms',
-      actual: samples.length > 1 ? `${Math.round(maxSampleGapMs)} ms` : '样本不足',
+      name: { key: 'validation.checks.sampleContinuity.name' },
+      description: { key: 'validation.checks.sampleContinuity.description' },
+      expected: { key: 'validation.checks.sampleContinuity.expected' },
+      actual:
+        samples.length > 1
+          ? {
+              key: 'validation.checks.sampleContinuity.actual',
+              params: { value: Math.round(maxSampleGapMs) },
+            }
+          : { key: 'validation.checks.sampleContinuity.insufficient' },
       passed: continuous,
     },
   ]
@@ -256,30 +274,50 @@ export function buildSimulationValidation(
     checks.push(
       {
         id: 'tcp-waypoint-coverage',
-        name: 'TCP 目标覆盖',
-        description: '每个外部算法目标是否都记录到任务到达时的实际 TCP',
-        expected: `${tcpTargetCount} / ${tcpTargetCount}`,
-        actual: `${tcpWaypointErrors.length} / ${tcpTargetCount}`,
+        name: { key: 'validation.checks.tcpCoverage.name' },
+        description: { key: 'validation.checks.tcpCoverage.description' },
+        expected: {
+          key: 'validation.checks.tcpCoverage.value',
+          params: { actual: tcpTargetCount, expected: tcpTargetCount },
+        },
+        actual: {
+          key: 'validation.checks.tcpCoverage.value',
+          params: { actual: tcpWaypointErrors.length, expected: tcpTargetCount },
+        },
         passed: tcpWaypointErrors.length === tcpTargetCount,
       },
       {
         id: 'tcp-position-error',
-        name: 'TCP 位置误差',
-        description: '目标 TCP 与任务到达时实际 TCP 的最大直线距离',
-        expected: `≤ ${TCP_POSITION_TOLERANCE_M * 1000} mm`,
+        name: { key: 'validation.checks.tcpPositionError.name' },
+        description: { key: 'validation.checks.tcpPositionError.description' },
+        expected: {
+          key: 'validation.checks.tcpPositionError.expected',
+          params: { value: TCP_POSITION_TOLERANCE_M * 1000 },
+        },
         actual:
           maxTcpPositionError === null
-            ? '无到达样本'
-            : `${(maxTcpPositionError * 1000).toFixed(3)} mm`,
+            ? { key: 'validation.checks.noArrivalSample' }
+            : {
+                key: 'validation.checks.tcpPositionError.actual',
+                params: { value: (maxTcpPositionError * 1000).toFixed(3) },
+              },
         passed: maxTcpPositionError !== null && maxTcpPositionError <= TCP_POSITION_TOLERANCE_M,
       },
       {
         id: 'tcp-orientation-error',
-        name: 'TCP 姿态误差',
-        description: '目标姿态与任务到达时实际姿态的最大旋转夹角',
-        expected: `≤ ${TCP_ORIENTATION_TOLERANCE_DEG}°`,
+        name: { key: 'validation.checks.tcpOrientationError.name' },
+        description: { key: 'validation.checks.tcpOrientationError.description' },
+        expected: {
+          key: 'validation.checks.tcpOrientationError.expected',
+          params: { value: TCP_ORIENTATION_TOLERANCE_DEG },
+        },
         actual:
-          maxTcpOrientationError === null ? '无到达样本' : `${maxTcpOrientationError.toFixed(3)}°`,
+          maxTcpOrientationError === null
+            ? { key: 'validation.checks.noArrivalSample' }
+            : {
+                key: 'validation.checks.tcpOrientationError.actual',
+                params: { value: maxTcpOrientationError.toFixed(3) },
+              },
         passed:
           maxTcpOrientationError !== null &&
           maxTcpOrientationError <= TCP_ORIENTATION_TOLERANCE_DEG,

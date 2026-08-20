@@ -1,5 +1,7 @@
 # IK 接口与接入方案
 
+[简体中文](./IK_DESIGN.md) | [English](./IK_DESIGN.en.md)
+
 ## 当前边界
 
 本阶段只定义 `InverseKinematicsSolver` 接口和数据契约，不提供任何本地假解算、随机关节值或硬编码映射。当前可执行的机器人任务只保存并执行关节空间目标。
