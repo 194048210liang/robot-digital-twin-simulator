@@ -63,6 +63,28 @@ describe('robot task file', () => {
     expect(getTaskCompatibilityError(file, [joint({ max: 2 })])).toContain('关节类型或限位')
   })
 
+  it('带 TCP 目标的任务必须匹配末端 Link', () => {
+    const file = createRobotTaskFile(
+      {
+        ...task,
+        steps: [
+          {
+            ...task.steps[0]!,
+            targetTcpPose: { x: 0.4, y: 0, z: 0.3, rx: 0, ry: 0, rz: 0 },
+          },
+        ],
+      },
+      {
+        modelName: 'Test Robot',
+        modelFileName: 'test.urdf',
+        tcpLinkName: 'tool0',
+        joints: [joint()],
+      },
+    )
+
+    expect(getTaskCompatibilityError(file, [joint()], 'other-tool')).toContain('TCP Link')
+  })
+
   it('拒绝未知格式和版本', () => {
     expect(parseRobotTaskFile({ format: 'other', version: 1 })).toBeNull()
     expect(

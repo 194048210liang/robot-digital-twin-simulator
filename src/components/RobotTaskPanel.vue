@@ -5,6 +5,12 @@ import { faFileImport } from '@fortawesome/free-solid-svg-icons'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useRobotTaskRunner } from '@/composables/useRobotTaskRunner'
+import {
+  algorithmTrajectoryToTaskInput,
+  createAlgorithmTrajectoryTemplate,
+  getAlgorithmTrajectoryCompatibilityError,
+  parseAlgorithmTrajectoryFile,
+} from '@/robot/algorithm-trajectory'
 import { toDisplayValue } from '@/robot/config'
 import { isSameJointPose, type RobotTask, type RobotTaskStatus } from '@/robot/task'
 import {
@@ -14,6 +20,7 @@ import {
 } from '@/robot/task-file'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
+import type { TcpPose } from '@/robot/types'
 import { downloadTextFile, sanitizeFileName } from '@/utils/download'
 
 const route = useRoute()
@@ -23,6 +30,7 @@ const taskStore = useRobotTaskStore()
 const { canExecuteTask, executeTask: runTask } = useRobotTaskRunner()
 const playingTaskId = ref('')
 const taskFileInput = ref<HTMLInputElement>()
+const algorithmFileInput = ref<HTMLInputElement>()
 
 const statusLabels: Record<RobotTaskStatus, string> = {
   idle: '待播放',
@@ -98,13 +106,58 @@ async function importTask(event: Event) {
     const parsed: unknown = JSON.parse(await file.text())
     const taskDocument = parseRobotTaskFile(parsed)
     if (!taskDocument) throw new Error('不是有效的 RoboStation 任务文件')
-    const compatibilityError = getTaskCompatibilityError(taskDocument, robotStore.joints)
+    const compatibilityError = getTaskCompatibilityError(
+      taskDocument,
+      robotStore.joints,
+      robotStore.tcpState.sourceLink,
+    )
     if (compatibilityError) throw new Error(compatibilityError)
     const task = taskStore.importTask(taskDocument.task)
     if (!task) throw new Error(taskStore.persistenceError || '任务导入失败')
     ElMessage.success(`任务“${task.name}”已导入`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '任务文件读取失败')
+  }
+}
+
+function downloadAlgorithmTemplate() {
+  const template = createAlgorithmTrajectoryTemplate({
+    modelName: robotStore.modelName,
+    modelFileName: robotStore.modelFileName,
+    tcpLinkName: robotStore.tcpState.sourceLink,
+    joints: robotStore.joints,
+    tcpPose: robotStore.tcpPose,
+    speedScale: robotStore.speedScale,
+  })
+  downloadTextFile(
+    `${sanitizeFileName(robotStore.modelName) || 'robot'}.algorithm-trajectory.json`,
+    JSON.stringify(template, null, 2),
+    'application/json;charset=utf-8',
+  )
+  ElMessage.success('已下载当前模型的算法结果模板')
+}
+
+async function importAlgorithmTrajectory(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const parsed: unknown = JSON.parse(await file.text())
+    const document = parseAlgorithmTrajectoryFile(parsed)
+    if (!document) throw new Error('不是有效的 RoboStation 外部算法结果文件')
+    const compatibilityError = getAlgorithmTrajectoryCompatibilityError(
+      document,
+      robotStore.joints,
+      robotStore.tcpState.sourceLink,
+    )
+    if (compatibilityError) throw new Error(compatibilityError)
+    const task = taskStore.createTask(algorithmTrajectoryToTaskInput(document, robotStore.joints))
+    if (!task) throw new Error(taskStore.persistenceError || '算法结果转换任务失败')
+    ElMessage.success(`算法结果已转换为任务“${task.name}”`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '算法结果文件读取失败')
   }
 }
 
@@ -130,6 +183,10 @@ function formatTarget(jointId: string, position: number) {
   if (!joint) return `${jointId} ${position.toFixed(3)}`
   return `${joint.displayName} ${toDisplayValue(joint, position).toFixed(joint.displayDecimals)} ${joint.displayUnit}`
 }
+
+function formatTcpTarget(pose: TcpPose) {
+  return `TCP ${pose.x.toFixed(3)}, ${pose.y.toFixed(3)}, ${pose.z.toFixed(3)} m · ${pose.rx.toFixed(2)}°, ${pose.ry.toFixed(2)}°, ${pose.rz.toFixed(2)}°`
+}
 </script>
 
 <template>
@@ -142,14 +199,36 @@ function formatTarget(jointId: string, position: number) {
         accept=".json,.robot-task.json,application/json"
         @change="importTask"
       />
+      <input
+        ref="algorithmFileInput"
+        class="task-file-input"
+        type="file"
+        accept=".json,.algorithm-trajectory.json,application/json"
+        @change="importAlgorithmTrajectory"
+      />
       <div>
         <h3>任务编排</h3>
-        <p>播放任务后自动采集关节与 TCP 数据，并生成一条验证记录。</p>
+        <p>支持示教任务，也可导入外部算法的目标 TCP 与关节解进行验证。</p>
       </div>
       <div class="guide-actions">
         <ElButton @click="taskFileInput?.click()">
           <FontAwesomeIcon :icon="faFileImport" />导入任务
         </ElButton>
+        <ElDropdown
+          split-button
+          type="primary"
+          plain
+          :disabled="!robotStore.modelLoaded"
+          @click="algorithmFileInput?.click()"
+          @command="downloadAlgorithmTemplate"
+        >
+          导入算法结果
+          <template #dropdown>
+            <ElDropdownMenu>
+              <ElDropdownItem command="template">下载当前模型模板</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
         <ElButton plain @click="goToJointControl">前往关节示教</ElButton>
       </div>
     </section>
@@ -178,6 +257,9 @@ function formatTarget(jointId: string, position: number) {
                   <small>速度 {{ Math.round(step.speedScale * 100) }}%</small>
                 </div>
                 <div class="step-targets">
+                  <strong v-if="step.targetTcpPose" class="step-tcp">
+                    {{ formatTcpTarget(step.targetTcpPose) }}
+                  </strong>
                   <span v-for="target in step.targets" :key="target.jointId">
                     {{ formatTarget(target.jointId, target.position) }}
                   </span>
@@ -322,9 +404,11 @@ function formatTarget(jointId: string, position: number) {
 }
 .guide-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 8px;
 }
-.guide-actions :deep(.el-button) {
+.guide-actions :deep(.el-button),
+.guide-actions :deep(.el-dropdown) {
   margin: 0;
   gap: 7px;
 }
@@ -411,6 +495,11 @@ h3 {
   gap: 3px 10px;
   color: var(--ink-700);
   font-size: 10.5px;
+}
+.step-tcp {
+  flex: 0 0 100%;
+  color: var(--blue-700);
+  font-weight: 600;
 }
 .task-monitor {
   position: relative;

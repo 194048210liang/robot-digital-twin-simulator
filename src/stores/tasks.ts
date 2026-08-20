@@ -129,6 +129,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
         id: step.id || createId('step'),
         targets: step.targets.map((target) => ({ ...target })),
         speedScale: Math.min(1, Math.max(0.1, step.speedScale)),
+        targetTcpPose: step.targetTcpPose ? { ...step.targetTcpPose } : undefined,
       })),
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -149,6 +150,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
         id: '',
         speedScale: step.speedScale,
         targets: step.targets.map((target) => ({ ...target })),
+        targetTcpPose: step.targetTcpPose ? { ...step.targetTcpPose } : undefined,
       })),
     })
   }

@@ -1,11 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
-import { faForward, faHouse, faPause, faPlay, faStop } from '@fortawesome/free-solid-svg-icons'
+import {
+  faForward,
+  faHouse,
+  faPause,
+  faPlay,
+  faSliders,
+  faStop,
+} from '@fortawesome/free-solid-svg-icons'
 import { useRobotController } from '@/robot/controller-context'
 import { useRobotStore } from '@/stores/robot'
 
-withDefaults(defineProps<{ showExecute?: boolean }>(), { showExecute: true })
+withDefaults(defineProps<{ showExecute?: boolean; showBatchSet?: boolean }>(), {
+  showExecute: true,
+  showBatchSet: false,
+})
+const emit = defineEmits<{ batchSet: [] }>()
 
 const controller = useRobotController()
 const store = useRobotStore()
@@ -93,6 +104,9 @@ async function stop() {
       </ElButton>
       <ElButton :disabled="!canHome" @click="controller.home()">
         <FontAwesomeIcon :icon="faHouse" />回到零位
+      </ElButton>
+      <ElButton v-if="showBatchSet" :disabled="!canHome" @click="emit('batchSet')">
+        <FontAwesomeIcon :icon="faSliders" />批量设置
       </ElButton>
     </ElButtonGroup>
     <ElButton class="danger" type="danger" plain :loading="stopLoading" @click="stop">

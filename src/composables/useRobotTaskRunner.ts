@@ -84,10 +84,41 @@ export function useRobotTaskRunner() {
     return true
   }
 
-  function moveToNextStep(task: RobotTask, stepIndex: number) {
+  async function waitForFreshTcpState(observedTimestamp: number) {
+    const deadline = Date.now() + 100
+    while (robotStore.tcpState.timestamp === observedTimestamp && Date.now() < deadline) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 16))
+    }
+  }
+
+  async function completeCurrentStep(task: RobotTask, stepIndex: number) {
+    await waitForFreshTcpState(robotStore.tcpState.timestamp)
+    const runtime = taskStore.runtime
+    if (
+      runtime.activeTaskId !== task.id ||
+      runtime.currentStepIndex !== stepIndex ||
+      runtime.status !== 'running' ||
+      robotStore.motionState !== 'idle'
+    ) {
+      return
+    }
+
+    validationStore.captureWaypoint(robotStore.joints, robotStore.tcpPose, stepIndex)
+    const nextStepIndex = stepIndex + 1
+    if (nextStepIndex < task.steps.length) {
+      await startStep(task, nextStepIndex)
+      return
+    }
+
+    const elapsedMs = elapsedTime()
+    taskStore.updateRuntime('completed', 100, elapsedMs)
+    finishValidation('completed')
+  }
+
+  function queueStepCompletion(task: RobotTask, stepIndex: number) {
     if (stepTransitionPending) return
     stepTransitionPending = true
-    void startStep(task, stepIndex).finally(() => {
+    void completeCurrentStep(task, stepIndex).finally(() => {
       stepTransitionPending = false
     })
   }
@@ -122,14 +153,8 @@ export function useRobotTaskRunner() {
       taskStore.updateRuntime('error', progress, elapsedMs, '机器人运动状态异常')
       finishValidation('error', '机器人运动状态异常')
     } else if (robotStore.motionState === 'idle') {
-      const nextStepIndex = runtime.currentStepIndex + 1
-      if (nextStepIndex < task.steps.length) {
-        taskStore.updateRuntime('running', progress, elapsedMs)
-        moveToNextStep(task, nextStepIndex)
-      } else {
-        taskStore.updateRuntime('completed', 100, elapsedMs)
-        finishValidation('completed')
-      }
+      taskStore.updateRuntime('running', progress, elapsedMs)
+      queueStepCompletion(task, runtime.currentStepIndex)
     } else {
       taskStore.updateRuntime('running', progress, elapsedMs)
       validationStore.setStatus('running')

@@ -81,6 +81,19 @@ describe('robot task', () => {
     expect(isRobotTask(task)).toBe(true)
   })
 
+  it('保存并导入算法任务时保留 TCP 目标', () => {
+    const store = useRobotTaskStore()
+    const targetTcpPose = { x: 0.4, y: 0, z: 0.3, rx: 0, ry: 45, rz: 0 }
+    const task = store.createTask({
+      name: '算法任务',
+      steps: [{ ...taskStep(), targetTcpPose }],
+    })
+
+    expect(task?.steps[0]?.targetTcpPose).toEqual(targetTcpPose)
+    if (!task) return
+    expect(store.importTask(task)?.steps[0]?.targetTcpPose).toEqual(targetTcpPose)
+  })
+
   it('拒绝连续添加完全相同的姿态', () => {
     const store = useRobotTaskStore()
     const targets = taskStep().targets

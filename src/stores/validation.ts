@@ -59,7 +59,12 @@ export const useValidationStore = defineStore('simulation-validation', () => {
     if (activeRecord.value) finish('stopped', '新的仿真任务已开始')
     const startedAt = Date.now()
     const sample = createSimulationSample(joints, tcp, 0, startedAt, startedAt)
-    const validation = buildSimulationValidation('running', jointDefinitions(joints), [sample])
+    const validation = buildSimulationValidation(
+      'running',
+      jointDefinitions(joints),
+      [sample],
+      task,
+    )
     const record: SimulationRecord = {
       format: SIMULATION_RECORD_FORMAT,
       version: SIMULATION_RECORD_VERSION,
@@ -85,16 +90,34 @@ export const useValidationStore = defineStore('simulation-validation', () => {
     return record
   }
 
-  function sample(joints: JointState[], tcp: TcpPose, stepIndex: number, force = false) {
+  function sample(
+    joints: JointState[],
+    tcp: TcpPose,
+    stepIndex: number,
+    force = false,
+    waypointReached = false,
+  ) {
     const record = activeRecord.value
     if (!record || (record.status !== 'running' && !force)) return false
+    if (
+      waypointReached &&
+      record.samples.some((item) => item.stepIndex === stepIndex && item.waypointReached)
+    ) {
+      return false
+    }
     const timestamp = Date.now()
     const previous = record.samples.at(-1)
     if (!force && previous && timestamp - previous.timestamp < SAMPLE_INTERVAL_MS) return false
     if (record.samples.length >= MAX_SAMPLES_PER_RECORD) return false
-    record.samples.push(createSimulationSample(joints, tcp, stepIndex, record.startedAt, timestamp))
+    record.samples.push(
+      createSimulationSample(joints, tcp, stepIndex, record.startedAt, timestamp, waypointReached),
+    )
     record.durationMs = timestamp - record.startedAt
     return true
+  }
+
+  function captureWaypoint(joints: JointState[], tcp: TcpPose, stepIndex: number) {
+    return sample(joints, tcp, stepIndex, true, true)
   }
 
   function setStatus(status: Extract<RobotTaskStatus, 'running' | 'paused'>) {
@@ -110,9 +133,15 @@ export const useValidationStore = defineStore('simulation-validation', () => {
     record.durationMs = endedAt - record.startedAt
     record.status = status
     record.error = error
-    const validation = buildSimulationValidation(status, record.jointDefinitions, record.samples)
+    const validation = buildSimulationValidation(
+      status,
+      record.jointDefinitions,
+      record.samples,
+      record.task,
+    )
     record.summary = validation.summary
     record.checks = validation.checks
+    record.tcpWaypointErrors = validation.tcpWaypointErrors
     activeRecordId.value = null
     return record
   }
@@ -142,6 +171,7 @@ export const useValidationStore = defineStore('simulation-validation', () => {
     isRecording,
     begin,
     sample,
+    captureWaypoint,
     setStatus,
     finish,
     select,

@@ -157,20 +157,31 @@ onBeforeUnmount(() => {
       </template>
     </div>
     <footer class="panel-summary">
-      <div class="speed-control">
-        <strong>速度倍率</strong>
-        <ElSlider
-          size="small"
-          :model-value="store.speedScale"
-          :min="0.1"
-          :max="1"
-          :step="0.05"
-          :show-tooltip="false"
-          :disabled="!canTeach"
-          aria-label="速度倍率"
-          @input="setSpeedScale"
-        />
-        <span>{{ Math.round(store.speedScale * 100) }}%</span>
+      <div class="task-draft">
+        <div class="draft-title">
+          <strong>任务姿态</strong>
+          <span>已添加 {{ taskStore.draftSteps.length }} 个</span>
+        </div>
+        <p>按添加顺序播放</p>
+        <div class="draft-actions">
+          <ElButton type="primary" :disabled="!canTeach" @click="addCurrentPose">
+            添加当前姿态
+          </ElButton>
+          <ElButton
+            type="primary"
+            plain
+            :disabled="!taskStore.draftSteps.length"
+            @click="openSaveDialog"
+          >
+            保存任务
+          </ElButton>
+        </div>
+        <div v-if="taskStore.draftSteps.length" class="draft-tools">
+          <ElButton link @click="taskStore.removeLastDraftStep()">撤销上一步</ElButton>
+          <ElPopconfirm title="确定清空已添加的所有姿态？" @confirm="taskStore.clearDraft()">
+            <template #reference><ElButton type="danger" link>清空</ElButton></template>
+          </ElPopconfirm>
+        </div>
       </div>
       <div class="tcp-mini">
         <strong>TCP 位置（基坐标系）</strong>
@@ -201,29 +212,20 @@ onBeforeUnmount(() => {
           </div>
         </dl>
       </div>
-      <div class="task-draft">
-        <div class="draft-title">
-          <strong>任务姿态</strong>
-          <span>已添加 {{ taskStore.draftSteps.length }} 个</span>
-        </div>
-        <p>按添加顺序播放</p>
-        <div class="draft-actions">
-          <ElButton :disabled="!canTeach" @click="addCurrentPose">添加当前姿态</ElButton>
-          <ElButton
-            type="primary"
-            plain
-            :disabled="!taskStore.draftSteps.length"
-            @click="openSaveDialog"
-          >
-            保存任务
-          </ElButton>
-        </div>
-        <div v-if="taskStore.draftSteps.length" class="draft-tools">
-          <ElButton link @click="taskStore.removeLastDraftStep()">撤销上一步</ElButton>
-          <ElPopconfirm title="确定清空已添加的所有姿态？" @confirm="taskStore.clearDraft()">
-            <template #reference><ElButton type="danger" link>清空</ElButton></template>
-          </ElPopconfirm>
-        </div>
+      <div class="speed-control">
+        <strong>速度倍率</strong>
+        <ElSlider
+          size="small"
+          :model-value="store.speedScale"
+          :min="0.1"
+          :max="1"
+          :step="0.05"
+          :show-tooltip="false"
+          :disabled="!canTeach"
+          aria-label="速度倍率"
+          @input="setSpeedScale"
+        />
+        <span>{{ Math.round(store.speedScale * 100) }}%</span>
       </div>
     </footer>
 
@@ -274,16 +276,17 @@ onBeforeUnmount(() => {
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-rows: 38px minmax(0, 1fr) 96px;
+  grid-template-rows: 40px minmax(0, 1fr) 104px;
 }
 .joint-head,
 .joint-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1.15fr) 70px minmax(230px, 1.55fr) 68px 68px;
+  grid-template-columns: minmax(110px, 1fr) 68px minmax(210px, 1.85fr) 62px 62px;
   align-items: center;
+  column-gap: 12px;
 }
 .joint-head {
-  padding: 0 12px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--line-300);
   color: var(--ink-700);
   font-weight: 600;
@@ -298,10 +301,10 @@ onBeforeUnmount(() => {
   scrollbar-width: thin;
 }
 .group-row {
-  height: 22px;
+  height: 26px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--line-200);
   background: #f2f5f8;
   font-size: 12px;
@@ -309,8 +312,8 @@ onBeforeUnmount(() => {
 }
 .joint-row {
   width: 100%;
-  min-height: 28px;
-  padding: 0 12px;
+  min-height: 40px;
+  padding: 0 14px;
   border: 0;
   border-bottom: 1px solid #e4e9ef;
   background: #fff;
@@ -337,19 +340,19 @@ onBeforeUnmount(() => {
 }
 .target-control {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) 82px;
+  grid-template-columns: minmax(100px, 1fr) 92px;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 .number-wrap {
   position: relative;
-  width: 82px;
+  width: 92px;
 }
 .number-wrap :deep(.el-input-number) {
   width: 100%;
 }
 .number-wrap :deep(.el-input__wrapper) {
-  min-height: 24px;
+  min-height: 28px;
   padding: 0 22px 0 7px;
 }
 .number-wrap :deep(.el-input__inner) {
@@ -359,13 +362,13 @@ onBeforeUnmount(() => {
 .number-wrap small {
   position: absolute;
   right: 5px;
-  top: 5px;
+  top: 7px;
   color: var(--ink-500);
 }
 .panel-summary {
   min-height: 0;
   display: grid;
-  grid-template-columns: 25% 45% 30%;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.65fr) minmax(0, 0.85fr);
   overflow: hidden;
   border-top: 1px solid var(--line-300);
   background: #fbfcfd;
@@ -377,8 +380,7 @@ onBeforeUnmount(() => {
   column-gap: 12px;
   row-gap: 6px;
   align-items: center;
-  padding: 10px 14px;
-  border-right: 1px solid var(--line-200);
+  padding: 12px;
 }
 .speed-control strong {
   grid-column: 1;
@@ -389,7 +391,6 @@ onBeforeUnmount(() => {
   color: var(--ink-700);
   font-variant-numeric: tabular-nums;
 }
-.target-control :deep(.el-slider),
 .speed-control :deep(.el-slider) {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -397,12 +398,19 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 22px;
 }
-.target-control :deep(.el-slider__runway),
 .speed-control :deep(.el-slider__runway) {
   margin: 9px 0;
 }
+.target-control :deep(.el-slider) {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+}
+.target-control :deep(.el-slider__runway) {
+  margin: 11px 0;
+}
 .tcp-mini {
-  padding: 8px 14px;
+  padding: 10px 12px;
   border-right: 1px solid var(--line-200);
 }
 .tcp-mini strong {
@@ -431,7 +439,8 @@ dd {
 }
 .task-draft {
   min-width: 0;
-  padding: 6px 10px;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line-200);
 }
 .draft-title {
   display: flex;
@@ -445,19 +454,21 @@ dd {
   font-size: 11px;
 }
 .task-draft p {
-  margin: 2px 0 4px;
-  line-height: 12px;
+  margin: 3px 0 6px;
+  line-height: 14px;
 }
 .draft-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 .draft-actions :deep(.el-button) {
   min-width: 0;
-  height: 28px;
+  height: 32px;
   margin: 0;
-  padding-inline: 8px;
+  padding-inline: 6px;
+  font-size: 12px;
+  font-weight: 600;
 }
 .draft-tools {
   display: flex;

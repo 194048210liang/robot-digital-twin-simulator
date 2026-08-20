@@ -77,7 +77,11 @@ export function parseRobotTaskFile(value: unknown): RobotTaskFile | null {
   return value as unknown as RobotTaskFile
 }
 
-export function getTaskCompatibilityError(file: RobotTaskFile, joints: JointState[]) {
+export function getTaskCompatibilityError(
+  file: RobotTaskFile,
+  joints: JointState[],
+  tcpLinkName?: string,
+) {
   const currentIds = new Set(joints.map((joint) => joint.id))
   const missingJoints = file.task.steps
     .flatMap((step) => step.targets)
@@ -85,6 +89,13 @@ export function getTaskCompatibilityError(file: RobotTaskFile, joints: JointStat
     .filter((jointId, index, ids) => !currentIds.has(jointId) && ids.indexOf(jointId) === index)
 
   if (missingJoints.length) return `当前模型缺少任务关节：${missingJoints.join('、')}`
+  if (
+    tcpLinkName !== undefined &&
+    file.task.steps.some((step) => step.targetTcpPose) &&
+    file.model.tcpLinkName !== tcpLinkName
+  ) {
+    return `任务 TCP Link 与当前模型不一致：${file.model.tcpLinkName || '空'} / ${tcpLinkName || '空'}`
+  }
   if (file.model.jointSignature !== createJointSignature(joints)) {
     return '任务模型的关节类型或限位与当前模型不一致'
   }

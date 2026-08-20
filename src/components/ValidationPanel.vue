@@ -11,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const validation = useValidationStore()
 const record = computed(() => validation.selectedRecord)
+const hasTcpTargets = computed(() => Boolean(record.value?.summary.tcpTargetCount))
 
 const statusLabel = computed(() => {
   const labels = {
@@ -113,14 +114,38 @@ function goToTasks() {
             </div>
           </dl>
           <dl>
-            <div>
-              <dt>开始时间</dt>
-              <dd>{{ formatDate(record.startedAt) }}</dd>
-            </div>
-            <div>
-              <dt>结束时间</dt>
-              <dd>{{ formatDate(record.endedAt) }}</dd>
-            </div>
+            <template v-if="hasTcpTargets">
+              <div>
+                <dt>最大位置误差</dt>
+                <dd>
+                  {{
+                    record.summary.maxTcpPositionError === null
+                      ? '—'
+                      : `${(record.summary.maxTcpPositionError * 1000).toFixed(3)} mm`
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>最大姿态误差</dt>
+                <dd>
+                  {{
+                    record.summary.maxTcpOrientationError === null
+                      ? '—'
+                      : `${record.summary.maxTcpOrientationError.toFixed(3)}°`
+                  }}
+                </dd>
+              </div>
+            </template>
+            <template v-else>
+              <div>
+                <dt>开始时间</dt>
+                <dd>{{ formatDate(record.startedAt) }}</dd>
+              </div>
+              <div>
+                <dt>结束时间</dt>
+                <dd>{{ formatDate(record.endedAt) }}</dd>
+              </div>
+            </template>
           </dl>
         </div>
       </section>
@@ -146,7 +171,7 @@ function goToTasks() {
       <section class="export-bar">
         <div>
           <strong>验证数据输出</strong>
-          <span>JSON 含任务、模型、采样与验证结论；CSV 为逐时刻关节与 TCP 数据。</span>
+          <span>JSON 含目标/实际 TCP 与验证结论；CSV 为逐时刻关节、TCP 和跟踪误差。</span>
         </div>
         <ElButton :disabled="validation.isRecording" @click="exportJson">
           <FontAwesomeIcon :icon="faDownload" />导出 JSON

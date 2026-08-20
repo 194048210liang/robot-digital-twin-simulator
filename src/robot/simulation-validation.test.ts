@@ -90,7 +90,40 @@ describe('simulation validation', () => {
 
     const csv = simulationRecordToCsv(record)
     expect(csv).toContain('tcp_x_m')
+    expect(csv).toContain('target_tcp_x_m')
+    expect(csv).toContain('waypoint_reached')
     expect(csv).toContain('joint-a_position,joint-a_target,joint-a_velocity')
     expect(csv.split('\r\n')).toHaveLength(3)
+  })
+
+  it('比较算法目标与姿态到达时的实际 TCP', () => {
+    const task = {
+      id: 'task-1',
+      name: '算法轨迹',
+      description: '',
+      steps: [
+        {
+          id: 'step-1',
+          speedScale: 0.5,
+          targets: [{ jointId: 'joint-a', position: 0.5 }],
+          targetTcpPose: { x: 0.5, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+        },
+      ],
+      createdAt: 1,
+      updatedAt: 1,
+    }
+    const reached = { ...sample(1100, 0.501), waypointReached: true }
+    const validation = buildSimulationValidation(
+      'completed',
+      definitions,
+      [sample(1000, 0), reached],
+      task,
+    )
+
+    expect(validation.summary.tcpTargetCount).toBe(1)
+    expect(validation.summary.tcpReachedCount).toBe(1)
+    expect(validation.summary.maxTcpPositionError).toBeCloseTo(0.001)
+    expect(validation.tcpWaypointErrors[0]?.actual.x).toBe(0.501)
+    expect(validation.checks.find((check) => check.id === 'tcp-position-error')?.passed).toBe(true)
   })
 })

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faCube } from '@fortawesome/free-solid-svg-icons'
 import type { TabPaneName } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import BatchSetDialog from '@/components/BatchSetDialog.vue'
 import ConsolePanel from '@/components/ConsolePanel.vue'
 import JointControlPanel from '@/components/JointControlPanel.vue'
 import MotionControls from '@/components/MotionControls.vue'
@@ -18,6 +19,7 @@ type ControlPanel = 'joint' | 'tcp' | 'task' | 'validation'
 
 const route = useRoute()
 const router = useRouter()
+const batchDialogVisible = ref(false)
 const activePanel = ref<ControlPanel>(
   route.query.tab === 'tcp' || route.query.tab === 'task' || route.query.tab === 'validation'
     ? route.query.tab
@@ -39,6 +41,10 @@ function selectPanel(panel: TabPaneName) {
   void router.replace({
     query: { ...route.query, tab: nextPanel === 'joint' ? undefined : nextPanel },
   })
+}
+
+function openBatchSet() {
+  batchDialogVisible.value = true
 }
 </script>
 
@@ -75,10 +81,15 @@ function selectPanel(panel: TabPaneName) {
           <RobotTaskPanel v-show="activePanel === 'task'" />
           <ValidationPanel v-show="activePanel === 'validation'" />
         </div>
-        <MotionControls :show-execute="false" />
+        <MotionControls
+          :show-execute="false"
+          :show-batch-set="activePanel === 'joint'"
+          @batch-set="openBatchSet"
+        />
       </section>
     </main>
     <ConsolePanel />
+    <BatchSetDialog v-model="batchDialogVisible" />
   </div>
 </template>
 

@@ -1,3 +1,5 @@
+import type { TcpPose } from './types'
+
 export type RobotTaskStatus = 'idle' | 'running' | 'paused' | 'completed' | 'stopped' | 'error'
 
 export interface RobotTaskJointTarget {
@@ -9,6 +11,7 @@ export interface RobotTaskStep {
   id: string
   targets: RobotTaskJointTarget[]
   speedScale: number
+  targetTcpPose?: TcpPose
 }
 
 export interface RobotTask {
@@ -55,6 +58,18 @@ function isRobotTaskTarget(value: unknown): value is RobotTaskJointTarget {
   )
 }
 
+function isTcpPose(value: unknown): value is TcpPose {
+  return (
+    isRecord(value) &&
+    Number.isFinite(value.x) &&
+    Number.isFinite(value.y) &&
+    Number.isFinite(value.z) &&
+    Number.isFinite(value.rx) &&
+    Number.isFinite(value.ry) &&
+    Number.isFinite(value.rz)
+  )
+}
+
 function isRobotTaskStep(value: unknown): value is RobotTaskStep {
   return (
     isRecord(value) &&
@@ -63,6 +78,7 @@ function isRobotTaskStep(value: unknown): value is RobotTaskStep {
     Number.isFinite(value.speedScale) &&
     Number(value.speedScale) >= 0.1 &&
     Number(value.speedScale) <= 1 &&
+    (value.targetTcpPose === undefined || isTcpPose(value.targetTcpPose)) &&
     Array.isArray(value.targets) &&
     value.targets.length > 0 &&
     value.targets.every(isRobotTaskTarget)
@@ -79,6 +95,7 @@ export function cloneRobotTask(task: RobotTask): RobotTask {
     steps: task.steps.map((step) => ({
       ...step,
       targets: step.targets.map((target) => ({ ...target })),
+      targetTcpPose: step.targetTcpPose ? { ...step.targetTcpPose } : undefined,
     })),
   }
 }
