@@ -1,26 +1,36 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
   faCamera,
   faCompress,
   faCrosshairs,
   faEraser,
+  faFolderOpen,
   faHouse,
   faRotate,
   faRoute,
   faTableCellsLarge,
 } from '@fortawesome/free-solid-svg-icons'
 import { RobotScene } from '@/graphics/robot-scene'
+import { jointDefinitions } from '@/robot/config'
 import { useRobotStore } from '@/stores/robot'
+import { useRobotTaskStore } from '@/stores/tasks'
 import { useTrajectoryStore } from '@/stores/trajectory'
+import { useValidationStore } from '@/stores/validation'
 
 const store = useRobotStore()
+const taskStore = useRobotTaskStore()
 const trajectory = useTrajectoryStore()
+const validation = useValidationStore()
 const container = ref<HTMLElement>()
+const modelFilesInput = ref<HTMLInputElement>()
+const modelFolderInput = ref<HTMLInputElement>()
 const scene = shallowRef<RobotScene>()
 const autoRotating = ref(false)
 const gridVisible = ref(true)
+const modelLoading = ref(false)
 
 onMounted(async () => {
   if (!container.value) return
@@ -29,18 +39,21 @@ onMounted(async () => {
     onTcpState: (state) => {
       store.setTcpState(state)
       trajectory.sample(state, store.motionState === 'running')
+      validation.sample(store.joints, state.pose, Math.max(0, taskStore.runtime.currentStepIndex))
     },
-    onModelLoaded: () => {
-      store.modelLoaded = true
-      store.modelError = ''
+    onModelLoaded: (profile) => {
+      validation.finish('stopped', '模型已切换')
+      store.setModelProfile(profile)
+      taskStore.clearDraft()
+      trajectory.clear()
       store.addLog({
         level: 'info',
         channel: 'communication',
         direction: 'SYS',
         source: '模型',
         code: 'MOD-2001',
-        message: 'URDF 加载成功：robot.urdf',
-        details: 'Fetch mobile manipulator',
+        message: `URDF 加载成功：${profile.fileName}`,
+        details: `${profile.name} · ${profile.joints.length} 个可控关节${profile.tcpLinkName ? ` · TCP ${profile.tcpLinkName}` : ''}`,
         status: '成功',
       })
     },
@@ -59,7 +72,12 @@ onMounted(async () => {
     },
   })
   try {
-    await scene.value.loadRobot(`${import.meta.env.BASE_URL}robot.urdf`)
+    await scene.value.loadRobot(`${import.meta.env.BASE_URL}robot.urdf`, {
+      name: 'Fetch',
+      fileName: 'robot.urdf',
+      tcpLinkName: 'gripper_link',
+      joints: jointDefinitions,
+    })
     scene.value.setJointValues(store.joints)
     scene.value.setTcpFrameVisible(trajectory.tcpFrameVisible)
     scene.value.setTrajectoryVisible(trajectory.trajectoryVisible)
@@ -115,14 +133,81 @@ function clearTrajectory() {
     status: '成功',
   })
 }
+
+function chooseImportSource(command: string) {
+  if (command === 'folder') modelFolderInput.value?.click()
+  else modelFilesInput.value?.click()
+}
+
+async function importLocalModel(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files ?? [])
+  input.value = ''
+  if (!files.length || !scene.value) return
+
+  const wasLoaded = store.modelLoaded
+  modelLoading.value = true
+  store.modelLoaded = false
+  store.modelError = ''
+  try {
+    const profile = await scene.value.loadRobotFiles(files)
+    scene.value.setJointValues(store.joints)
+    scene.value.setTcpFrameVisible(trajectory.tcpFrameVisible)
+    scene.value.setTrajectoryVisible(trajectory.trajectoryVisible)
+    scene.value.setTrajectory(trajectory.points)
+    ElMessage.success(`已加载 ${profile.name}，解析 ${profile.joints.length} 个可控关节`)
+  } catch (error) {
+    if (wasLoaded) {
+      store.modelLoaded = true
+      store.modelError = ''
+    }
+    ElMessage.error(error instanceof Error ? error.message : 'URDF 模型加载失败')
+  } finally {
+    modelLoading.value = false
+  }
+}
 </script>
 
 <template>
   <section class="viewport panel" aria-labelledby="viewport-title">
-    <header class="panel-title"><h2 id="viewport-title">3D 视图</h2></header>
+    <header class="panel-title">
+      <h2 id="viewport-title">3D 视图</h2>
+      <input
+        ref="modelFilesInput"
+        class="model-input"
+        type="file"
+        multiple
+        accept=".urdf,.stl,.dae,.png,.jpg,.jpeg"
+        @change="importLocalModel"
+      />
+      <input
+        ref="modelFolderInput"
+        class="model-input"
+        type="file"
+        multiple
+        webkitdirectory
+        @change="importLocalModel"
+      />
+      <ElDropdown trigger="click" @command="chooseImportSource">
+        <ElButton
+          size="small"
+          :loading="modelLoading"
+          :disabled="store.motionState === 'running' || store.motionState === 'paused'"
+        >
+          <FontAwesomeIcon :icon="faFolderOpen" />
+          导入 URDF
+        </ElButton>
+        <template #dropdown>
+          <ElDropdownMenu>
+            <ElDropdownItem command="files">选择 URDF 及资源文件</ElDropdownItem>
+            <ElDropdownItem command="folder">选择模型文件夹</ElDropdownItem>
+          </ElDropdownMenu>
+        </template>
+      </ElDropdown>
+    </header>
     <div ref="container" class="scene-host">
       <div v-if="!store.modelLoaded && !store.modelError" class="scene-notice">
-        <span class="spinner" />正在加载 Fetch URDF…
+        <span class="spinner" />{{ modelLoading ? '正在解析 URDF…' : '正在加载默认 URDF…' }}
       </div>
       <div v-if="store.modelError" class="scene-notice error">
         模型加载失败：{{ store.modelError }}
@@ -206,9 +291,16 @@ function clearTrajectory() {
   height: 38px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 14px;
   border-bottom: 1px solid var(--line-200);
   background: #fbfcfd;
+}
+.panel-title :deep(.el-button) {
+  gap: 7px;
+}
+.model-input {
+  display: none;
 }
 .panel-title h2 {
   margin: 0;

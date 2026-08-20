@@ -11,24 +11,30 @@ import RobotViewport from '@/components/RobotViewport.vue'
 import RobotTaskPanel from '@/components/RobotTaskPanel.vue'
 import TcpStatusPanel from '@/components/TcpStatusPanel.vue'
 import TopStatusBar from '@/components/TopStatusBar.vue'
+import ValidationPanel from '@/components/ValidationPanel.vue'
 import { useRobotWorkstation } from '@/composables/useRobotWorkstation'
 
-type ControlPanel = 'joint' | 'tcp' | 'task'
+type ControlPanel = 'joint' | 'tcp' | 'task' | 'validation'
 
 const route = useRoute()
 const router = useRouter()
 const activePanel = ref<ControlPanel>(
-  route.query.tab === 'tcp' || route.query.tab === 'task' ? route.query.tab : 'joint',
+  route.query.tab === 'tcp' || route.query.tab === 'task' || route.query.tab === 'validation'
+    ? route.query.tab
+    : 'joint',
 )
 const { currentTime } = useRobotWorkstation()
 
 watch(
   () => route.query.tab,
-  (tab) => (activePanel.value = tab === 'tcp' || tab === 'task' ? (tab as ControlPanel) : 'joint'),
+  (tab) =>
+    (activePanel.value =
+      tab === 'tcp' || tab === 'task' || tab === 'validation' ? (tab as ControlPanel) : 'joint'),
 )
 
 function selectPanel(panel: TabPaneName) {
-  const nextPanel: ControlPanel = panel === 'tcp' || panel === 'task' ? panel : 'joint'
+  const nextPanel: ControlPanel =
+    panel === 'tcp' || panel === 'task' || panel === 'validation' ? panel : 'joint'
   activePanel.value = nextPanel
   void router.replace({
     query: { ...route.query, tab: nextPanel === 'joint' ? undefined : nextPanel },
@@ -41,7 +47,9 @@ function selectPanel(panel: TabPaneName) {
     <header class="titlebar">
       <div class="brand">
         <span class="brand-mark"><FontAwesomeIcon :icon="faCube" /></span
-        ><strong>RoboStation</strong><span>机器人仿真控制台</span>
+        ><strong>RoboStation</strong><span class="brand-divider" /><span
+          >机器人离线仿真与验证工作站</span
+        >
       </div>
     </header>
     <TopStatusBar :current-time="currentTime" />
@@ -56,14 +64,16 @@ function selectPanel(panel: TabPaneName) {
           aria-label="控制视图"
           @tab-change="selectPanel"
         >
-          <ElTabPane label="关节控制" name="joint" />
+          <ElTabPane label="关节示教" name="joint" />
           <ElTabPane label="TCP 状态" name="tcp" />
-          <ElTabPane label="机器人任务" name="task" />
+          <ElTabPane label="任务编排" name="task" />
+          <ElTabPane label="验证结果" name="validation" />
         </ElTabs>
         <div class="control-content">
           <JointControlPanel v-show="activePanel === 'joint'" />
           <TcpStatusPanel v-show="activePanel === 'tcp'" />
           <RobotTaskPanel v-show="activePanel === 'task'" />
+          <ValidationPanel v-show="activePanel === 'validation'" />
         </div>
         <MotionControls :show-execute="false" />
       </section>
@@ -99,6 +109,12 @@ function selectPanel(panel: TabPaneName) {
 }
 .brand strong {
   font-size: 19px;
+}
+.brand-divider {
+  width: 1px;
+  height: 22px;
+  margin: 0 3px;
+  background: rgb(223 233 246 / 40%);
 }
 .brand-mark {
   width: 25px;

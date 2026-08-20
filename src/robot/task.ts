@@ -73,6 +73,16 @@ export function normalizeTaskText(value: string, maxLength: number) {
   return value.trim().slice(0, maxLength)
 }
 
+export function cloneRobotTask(task: RobotTask): RobotTask {
+  return {
+    ...task,
+    steps: task.steps.map((step) => ({
+      ...step,
+      targets: step.targets.map((target) => ({ ...target })),
+    })),
+  }
+}
+
 export function isRobotTask(value: unknown): value is RobotTask {
   if (!isRecord(value)) return false
   if (typeof value.id !== 'string' || !value.id) return false

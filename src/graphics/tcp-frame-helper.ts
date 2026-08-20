@@ -12,12 +12,16 @@ export class TcpFrameHelper {
     tcpObject.add(this.axes)
   }
 
+  detach() {
+    this.axes.removeFromParent()
+  }
+
   setVisible(visible: boolean) {
     this.axes.visible = visible
   }
 
   dispose() {
-    this.axes.removeFromParent()
+    this.detach()
     this.axes.geometry.dispose()
     const materials = Array.isArray(this.axes.material) ? this.axes.material : [this.axes.material]
     for (const material of materials) material.dispose()

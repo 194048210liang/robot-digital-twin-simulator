@@ -9,12 +9,16 @@ import { isTargetWithinLimits } from '@/robot/robot-controller'
 import { useRobotController } from '@/robot/controller-context'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
+import { useTrajectoryStore } from '@/stores/trajectory'
+import { useValidationStore } from '@/stores/validation'
 
 const ACTIVE_STATUSES = new Set<RobotTaskStatus>(['running', 'paused'])
 
 export function useRobotTaskRunner() {
   const robotStore = useRobotStore()
   const taskStore = useRobotTaskStore()
+  const trajectoryStore = useTrajectoryStore()
+  const validationStore = useValidationStore()
   const controller = useRobotController()
   let stepTransitionPending = false
 
@@ -45,6 +49,24 @@ export function useRobotTaskRunner() {
       }
     }
     return task.steps.length > 0
+  }
+
+  function finishValidation(status: RobotTaskStatus, error = '') {
+    const record = validationStore.finish(status, error, robotStore.joints, robotStore.tcpPose)
+    if (!record) return
+    const passed = record.summary.passed
+    robotStore.addLog({
+      level: passed ? 'info' : 'warning',
+      channel: passed ? 'command' : 'alarm',
+      direction: 'SYS',
+      source: '验证',
+      code: passed ? 'VALIDATION-PASS' : 'VALIDATION-INCOMPLETE',
+      message: passed
+        ? `任务“${record.taskName}”仿真验证通过`
+        : `任务“${record.taskName}”验证未通过`,
+      details: `${record.summary.sampleCount} 个样本 · TCP ${record.summary.tcpPathLength.toFixed(3)} m`,
+      status: passed ? '成功' : '警告',
+    })
   }
 
   async function startStep(task: RobotTask, stepIndex: number) {
@@ -92,10 +114,13 @@ export function useRobotTaskRunner() {
 
     if (robotStore.motionState === 'paused') {
       taskStore.updateRuntime('paused', progress, elapsedMs)
+      validationStore.setStatus('paused')
     } else if (robotStore.motionState === 'stopped') {
       taskStore.updateRuntime('stopped', progress, elapsedMs)
+      finishValidation('stopped')
     } else if (robotStore.motionState === 'error') {
       taskStore.updateRuntime('error', progress, elapsedMs, '机器人运动状态异常')
+      finishValidation('error', '机器人运动状态异常')
     } else if (robotStore.motionState === 'idle') {
       const nextStepIndex = runtime.currentStepIndex + 1
       if (nextStepIndex < task.steps.length) {
@@ -103,9 +128,11 @@ export function useRobotTaskRunner() {
         moveToNextStep(task, nextStepIndex)
       } else {
         taskStore.updateRuntime('completed', 100, elapsedMs)
+        finishValidation('completed')
       }
     } else {
       taskStore.updateRuntime('running', progress, elapsedMs)
+      validationStore.setStatus('running')
     }
   }
 
@@ -113,6 +140,24 @@ export function useRobotTaskRunner() {
     if (!canExecuteTask.value || !validateTask(task)) return false
 
     const positions = currentPositions()
+    trajectoryStore.clear()
+    validationStore.begin(
+      task,
+      robotStore.modelName,
+      robotStore.tcpState.sourceLink,
+      robotStore.joints,
+      robotStore.tcpPose,
+    )
+    robotStore.addLog({
+      level: 'info',
+      channel: 'command',
+      direction: 'SYS',
+      source: '验证',
+      code: 'VALIDATION-START',
+      message: `开始记录任务“${task.name}”的仿真数据`,
+      details: `${task.steps.length} 个姿态 · ${robotStore.joints.length} 个关节`,
+      status: '成功',
+    })
     taskStore.startTask(task.id, task.steps.length, positions)
     return startStep(task, 0)
   }

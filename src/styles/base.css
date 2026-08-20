@@ -40,12 +40,3 @@ input:focus-visible,
   width: 100%;
   height: 100%;
 }
-
-.el-table.adaptive-table .el-table__body-wrapper .el-scrollbar__view {
-  height: 100%;
-}
-
-.el-table.adaptive-table .el-table__body,
-.el-table.adaptive-table .el-table__body tbody {
-  height: 100%;
-}

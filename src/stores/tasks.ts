@@ -141,6 +141,18 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
     return task
   }
 
+  function importTask(task: RobotTask) {
+    return createTask({
+      name: task.name,
+      description: task.description,
+      steps: task.steps.map((step) => ({
+        id: '',
+        speedScale: step.speedScale,
+        targets: step.targets.map((target) => ({ ...target })),
+      })),
+    })
+  }
+
   function removeTask(taskId: string) {
     if (
       runtime.value.activeTaskId === taskId &&
@@ -202,6 +214,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
     removeLastDraftStep,
     clearDraft,
     createTask,
+    importTask,
     removeTask,
     startTask,
     startStep,

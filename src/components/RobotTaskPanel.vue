@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { faFileImport } from '@fortawesome/free-solid-svg-icons'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useRobotTaskRunner } from '@/composables/useRobotTaskRunner'
 import { toDisplayValue } from '@/robot/config'
 import { isSameJointPose, type RobotTask, type RobotTaskStatus } from '@/robot/task'
+import {
+  createRobotTaskFile,
+  getTaskCompatibilityError,
+  parseRobotTaskFile,
+} from '@/robot/task-file'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
+import { downloadTextFile, sanitizeFileName } from '@/utils/download'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,6 +22,7 @@ const robotStore = useRobotStore()
 const taskStore = useRobotTaskStore()
 const { canExecuteTask, executeTask: runTask } = useRobotTaskRunner()
 const playingTaskId = ref('')
+const taskFileInput = ref<HTMLInputElement>()
 
 const statusLabels: Record<RobotTaskStatus, string> = {
   idle: '待播放',
@@ -61,6 +70,44 @@ function removeTask(task: RobotTask) {
   else ElMessage.warning(taskStore.persistenceError || '播放中的任务不能删除')
 }
 
+function taskFile(task: RobotTask) {
+  return createRobotTaskFile(task, {
+    modelName: robotStore.modelName,
+    modelFileName: robotStore.modelFileName,
+    tcpLinkName: robotStore.tcpState.sourceLink,
+    joints: robotStore.joints,
+  })
+}
+
+function exportTask(task: RobotTask) {
+  downloadTextFile(
+    `${sanitizeFileName(task.name) || 'robot-task'}.robot-task.json`,
+    JSON.stringify(taskFile(task), null, 2),
+    'application/json;charset=utf-8',
+  )
+  ElMessage.success(`任务“${task.name}”已导出`)
+}
+
+async function importTask(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const parsed: unknown = JSON.parse(await file.text())
+    const taskDocument = parseRobotTaskFile(parsed)
+    if (!taskDocument) throw new Error('不是有效的 RoboStation 任务文件')
+    const compatibilityError = getTaskCompatibilityError(taskDocument, robotStore.joints)
+    if (compatibilityError) throw new Error(compatibilityError)
+    const task = taskStore.importTask(taskDocument.task)
+    if (!task) throw new Error(taskStore.persistenceError || '任务导入失败')
+    ElMessage.success(`任务“${task.name}”已导入`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '任务文件读取失败')
+  }
+}
+
 function goToJointControl() {
   const query = { ...route.query }
   delete query.tab
@@ -88,11 +135,23 @@ function formatTarget(jointId: string, position: number) {
 <template>
   <div class="task-panel">
     <section class="task-guide">
+      <input
+        ref="taskFileInput"
+        class="task-file-input"
+        type="file"
+        accept=".json,.robot-task.json,application/json"
+        @change="importTask"
+      />
       <div>
-        <h3>机器人任务</h3>
-        <p>在关节控制中调整模型、依次添加姿态并保存，然后回到这里播放。</p>
+        <h3>任务编排</h3>
+        <p>播放任务后自动采集关节与 TCP 数据，并生成一条验证记录。</p>
       </div>
-      <ElButton plain @click="goToJointControl">前往关节控制</ElButton>
+      <div class="guide-actions">
+        <ElButton @click="taskFileInput?.click()">
+          <FontAwesomeIcon :icon="faFileImport" />导入任务
+        </ElButton>
+        <ElButton plain @click="goToJointControl">前往关节示教</ElButton>
+      </div>
     </section>
 
     <section class="task-list">
@@ -147,7 +206,7 @@ function formatTarget(jointId: string, position: number) {
             <span v-else>待播放</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn label="操作" width="142" align="center">
+        <ElTableColumn label="操作" width="202" align="center">
           <template #default="{ row }">
             <ElButton
               type="primary"
@@ -158,6 +217,14 @@ function formatTarget(jointId: string, position: number) {
               @click="playTask(row)"
             >
               播放
+            </ElButton>
+            <ElButton
+              type="primary"
+              link
+              :aria-label="`导出任务 ${row.name}`"
+              @click="exportTask(row)"
+            >
+              导出
             </ElButton>
             <ElPopconfirm title="确定删除这个任务？" @confirm="removeTask(row)">
               <template #reference>
@@ -178,8 +245,8 @@ function formatTarget(jointId: string, position: number) {
           </template>
         </ElTableColumn>
       </ElTable>
-      <ElEmpty v-else description="暂无任务，请先到关节控制添加姿态并保存" :image-size="54">
-        <ElButton type="primary" plain @click="goToJointControl">前往关节控制</ElButton>
+      <ElEmpty v-else description="暂无任务，请先到关节示教添加姿态并保存" :image-size="54">
+        <ElButton type="primary" plain @click="goToJointControl">前往关节示教</ElButton>
       </ElEmpty>
     </section>
 
@@ -249,6 +316,17 @@ function formatTarget(jointId: string, position: number) {
 }
 .task-guide > div {
   min-width: 0;
+}
+.task-file-input {
+  display: none;
+}
+.guide-actions {
+  display: flex;
+  gap: 8px;
+}
+.guide-actions :deep(.el-button) {
+  margin: 0;
+  gap: 7px;
 }
 h3,
 p {

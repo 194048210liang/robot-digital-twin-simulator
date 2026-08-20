@@ -9,6 +9,7 @@ import type {
   SafetyState,
   TcpState,
   MotionState,
+  RobotModelProfile,
 } from '@/robot/types'
 
 let logSequence = 0
@@ -34,6 +35,8 @@ export const useRobotStore = defineStore('robot', () => {
   const safetyState = ref<SafetyState>('normal')
   const modelLoaded = ref(false)
   const modelError = ref('')
+  const modelName = ref('Fetch')
+  const modelFileName = ref('robot.urdf')
   const speedScale = ref(0.5)
   const fps = ref(0)
   const tcpState = ref<TcpState>({
@@ -70,6 +73,26 @@ export const useRobotStore = defineStore('robot', () => {
     tcpState.value = state
   }
 
+  function setModelProfile(profile: RobotModelProfile) {
+    joints.value = profile.joints.map((definition) => ({
+      ...definition,
+      current: definition.home,
+      target: definition.home,
+      velocity: 0,
+    }))
+    selectedJointId.value = joints.value[0]?.id ?? ''
+    modelName.value = profile.name
+    modelFileName.value = profile.fileName
+    modelLoaded.value = true
+    modelError.value = ''
+    motionState.value = 'idle'
+    tcpState.value = {
+      pose: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0 },
+      sourceLink: profile.tcpLinkName,
+      timestamp: 0,
+    }
+  }
+
   return {
     joints,
     selectedJointId,
@@ -79,6 +102,8 @@ export const useRobotStore = defineStore('robot', () => {
     safetyState,
     modelLoaded,
     modelError,
+    modelName,
+    modelFileName,
     speedScale,
     fps,
     tcpState,
@@ -91,5 +116,6 @@ export const useRobotStore = defineStore('robot', () => {
     addLog,
     clearLogs,
     setTcpState,
+    setModelProfile,
   }
 })

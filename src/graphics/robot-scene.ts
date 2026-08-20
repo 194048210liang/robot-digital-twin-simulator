@@ -5,20 +5,52 @@ import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
 import URDFLoader, { type URDFRobot } from 'urdf-loader'
 import { TcpFrameHelper } from '@/graphics/tcp-frame-helper'
 import { TrajectoryLine } from '@/graphics/trajectory-line'
+import { createRobotModelProfile } from '@/robot/urdf-model'
 import type { TrajectoryPoint } from '@/robot/trajectory'
-import type { JointState, TcpState } from '@/robot/types'
+import type { JointDefinition, JointState, RobotModelProfile, TcpState } from '@/robot/types'
 
 interface RobotSceneCallbacks {
   onFps: (fps: number) => void
   onTcpState: (state: TcpState) => void
-  onModelLoaded: () => void
+  onModelLoaded: (profile: RobotModelProfile) => void
   onModelError: (message: string) => void
 }
 
-const TCP_LINK_NAME = 'gripper_link'
+interface RobotLoadOptions {
+  name?: string
+  fileName: string
+  tcpLinkName?: string
+  joints?: JointDefinition[]
+}
 
 const transparentPixel =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLqWQAAAABJRU5ErkJggg=='
+
+function normalizeAssetPath(path: string) {
+  const withoutQuery = path.split(/[?#]/, 1)[0] ?? path
+  let decoded = withoutQuery
+  try {
+    decoded = decodeURIComponent(withoutQuery)
+  } catch {
+    // 保留无法解码的原始路径，后续仍可按文件名匹配。
+  }
+  const normalized = decoded
+    .replace(/^package:\/\//i, '')
+    .replace(/^[a-z]+:\/\/[^/]+\//i, '')
+    .replace(/\\/g, '/')
+  const segments: string[] = []
+  for (const segment of normalized.split('/')) {
+    if (!segment || segment === '.') continue
+    if (segment === '..') segments.pop()
+    else segments.push(segment)
+  }
+  return segments.join('/').toLowerCase()
+}
+
+function directoryOf(path: string) {
+  const separator = path.lastIndexOf('/')
+  return separator < 0 ? '' : path.slice(0, separator + 1)
+}
 
 export class RobotScene {
   private readonly scene = new THREE.Scene()
@@ -35,6 +67,7 @@ export class RobotScene {
   private readonly resizeObserver: ResizeObserver
   private robot: URDFRobot | null = null
   private tcpLink: THREE.Object3D | null = null
+  private localObjectUrls: string[] = []
   private animationFrame = 0
   private frames = 0
   private fpsStartedAt = performance.now()
@@ -56,7 +89,7 @@ export class RobotScene {
     this.scene.background = new THREE.Color(0xe2e8ee)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
-    this.renderer.domElement.setAttribute('aria-label', 'Fetch 机器人三维视图')
+    this.renderer.domElement.setAttribute('aria-label', '机器人三维视图')
     this.container.appendChild(this.renderer.domElement)
 
     this.camera.position.set(2.7, 1.9, 3.1)
@@ -107,47 +140,27 @@ export class RobotScene {
     this.animationFrame = requestAnimationFrame(this.render)
   }
 
-  async loadRobot(url: string) {
+  async loadRobot(url: string, options: RobotLoadOptions) {
     const manager = new THREE.LoadingManager()
     manager.setURLModifier((assetUrl) =>
       /\.png(?:$|\?)/i.test(assetUrl) ? transparentPixel : assetUrl,
     )
-    const loader = new URDFLoader(manager)
-    loader.parseCollision = false
-    loader.loadMeshCb = this.loadMesh
+    const loader = this.createLoader(manager)
 
-    await new Promise<void>((resolve, reject) => {
+    await new Promise<RobotModelProfile>((resolve, reject) => {
       loader.load(
         url,
         (robot) => {
-          this.robot = robot
-          robot.rotation.x = -Math.PI / 2
-          robot.traverse((object) => {
-            if (!(object instanceof THREE.Mesh)) return
-            object.castShadow = false
-            object.receiveShadow = false
-          })
-          this.scene.add(robot)
-          this.tcpLink = robot.links[TCP_LINK_NAME] ?? robot.getObjectByName(TCP_LINK_NAME) ?? null
-          if (!this.tcpLink) {
-            const message = `URDF 缺少 TCP 末端 link：${TCP_LINK_NAME}`
-            robot.removeFromParent()
-            this.robot = null
-            this.callbacks.onModelError(message)
-            reject(new Error(message))
-            return
-          }
-          this.tcpFrame.attachTo(this.tcpLink)
-          this.trajectoryLine.attachTo(robot)
-          robot.updateMatrixWorld(true)
-          this.needsRender = true
-          this.fitCamera()
-          window.setTimeout(() => {
-            robot.updateMatrixWorld(true)
-            this.fitCamera()
-          }, 350)
-          this.callbacks.onModelLoaded()
-          resolve()
+          const profile = createRobotModelProfile(
+            robot,
+            options.fileName,
+            options.joints,
+            options.name,
+            options.tcpLinkName,
+          )
+          this.releaseLocalObjectUrls()
+          this.mountRobot(robot, profile)
+          resolve(profile)
         },
         undefined,
         (error) => {
@@ -157,6 +170,70 @@ export class RobotScene {
         },
       )
     })
+  }
+
+  async loadRobotFiles(files: File[]) {
+    const urdfFiles = files.filter((file) => /\.urdf$/i.test(file.name))
+    if (urdfFiles.length !== 1) {
+      const message = urdfFiles.length === 0 ? '请选择一个 URDF 文件' : '一次只能加载一个 URDF 文件'
+      this.callbacks.onModelError(message)
+      throw new Error(message)
+    }
+
+    const urdfFile = urdfFiles[0]
+    if (!urdfFile) throw new Error('URDF 文件不存在')
+    const urdfPath = normalizeAssetPath(urdfFile.webkitRelativePath || urdfFile.name)
+    const resourceFiles = files.filter((file) => file !== urdfFile)
+    const exactUrls = new Map<string, string>()
+    const fileNameUrls = new Map<string, string | null>()
+    const objectUrls: string[] = []
+
+    for (const file of resourceFiles) {
+      const objectUrl = URL.createObjectURL(file)
+      objectUrls.push(objectUrl)
+      const relativePath = normalizeAssetPath(file.webkitRelativePath || file.name)
+      exactUrls.set(relativePath, objectUrl)
+      const fileName = normalizeAssetPath(file.name)
+      const previous = fileNameUrls.get(fileName)
+      fileNameUrls.set(fileName, previous === undefined ? objectUrl : null)
+    }
+
+    const manager = new THREE.LoadingManager()
+    manager.setURLModifier((assetUrl) => {
+      const normalized = normalizeAssetPath(assetUrl)
+      const fileName = normalized.split('/').at(-1) ?? normalized
+      const localUrl = exactUrls.get(normalized) ?? fileNameUrls.get(fileName)
+      if (localUrl) return localUrl
+      return /\.(?:png|jpe?g)(?:$|\?)/i.test(assetUrl) ? transparentPixel : assetUrl
+    })
+    const loader = this.createLoader(manager)
+    const content = await urdfFile.text()
+    const parsed = new window.DOMParser().parseFromString(content, 'application/xml')
+    if (parsed.querySelector('parsererror') || parsed.documentElement.tagName !== 'robot') {
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl)
+      const message = 'URDF XML 格式无效'
+      this.callbacks.onModelError(message)
+      throw new Error(message)
+    }
+
+    try {
+      const robot = loader.parse(parsed, directoryOf(urdfPath))
+      const profile = createRobotModelProfile(robot, urdfFile.name)
+      this.releaseLocalObjectUrls()
+      this.localObjectUrls = objectUrls
+      this.mountRobot(robot, profile)
+      manager.onLoad = () => {
+        if (this.robot !== robot) return
+        robot.updateMatrixWorld(true)
+        this.fitCamera()
+      }
+      return profile
+    } catch (error) {
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl)
+      const message = error instanceof Error ? error.message : 'URDF 模型解析失败'
+      this.callbacks.onModelError(message)
+      throw error
+    }
   }
 
   setJointValues(joints: JointState[]) {
@@ -171,7 +248,7 @@ export class RobotScene {
     const bounds = new THREE.Box3().setFromObject(this.robot)
     const center = bounds.getCenter(new THREE.Vector3())
     const size = bounds.getSize(new THREE.Vector3())
-    const maxDimension = Math.max(size.x, size.y, size.z)
+    const maxDimension = Math.max(size.x, size.y, size.z, 0.8)
     const distance =
       (maxDimension / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)))) * 1.18
     const direction = new THREE.Vector3(0.88, 0.48, 1).normalize()
@@ -249,6 +326,7 @@ export class RobotScene {
     })
     this.tcpFrame.dispose()
     this.trajectoryLine.dispose()
+    this.releaseLocalObjectUrls()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -290,6 +368,67 @@ export class RobotScene {
     }
 
     done(null, new Error(`不支持的模型格式：${path}`))
+  }
+
+  private createLoader(manager: THREE.LoadingManager) {
+    const loader = new URDFLoader(manager)
+    loader.parseCollision = false
+    loader.loadMeshCb = this.loadMesh
+    return loader
+  }
+
+  private mountRobot(robot: URDFRobot, profile: RobotModelProfile) {
+    this.removeCurrentRobot()
+    this.robot = robot
+    robot.rotation.x = -Math.PI / 2
+    robot.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return
+      object.castShadow = false
+      object.receiveShadow = false
+    })
+    this.scene.add(robot)
+    this.tcpLink = profile.tcpLinkName
+      ? (robot.links[profile.tcpLinkName] ?? robot.getObjectByName(profile.tcpLinkName) ?? null)
+      : null
+    if (this.tcpLink) this.tcpFrame.attachTo(this.tcpLink)
+    this.trajectoryLine.attachTo(robot)
+    this.lastJointValues.clear()
+    this.pendingJoints = null
+    robot.updateMatrixWorld(true)
+    this.renderer.domElement.setAttribute('aria-label', `${profile.name} 机器人三维视图`)
+    this.needsRender = true
+    this.fitCamera()
+    window.setTimeout(() => {
+      if (this.robot !== robot) return
+      robot.updateMatrixWorld(true)
+      this.fitCamera()
+    }, 350)
+    this.callbacks.onModelLoaded(profile)
+  }
+
+  private removeCurrentRobot() {
+    if (!this.robot) return
+    this.tcpFrame.detach()
+    this.trajectoryLine.detach()
+    this.robot.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return
+      object.geometry.dispose()
+      const materials = Array.isArray(object.material) ? object.material : [object.material]
+      for (const material of materials) {
+        for (const value of Object.values(material)) {
+          if (value instanceof THREE.Texture) value.dispose()
+        }
+        material.dispose()
+      }
+    })
+    this.robot.removeFromParent()
+    this.robot = null
+    this.tcpLink = null
+  }
+
+  private releaseLocalObjectUrls() {
+    for (const objectUrl of this.localObjectUrls) URL.revokeObjectURL(objectUrl)
+    this.localObjectUrls = []
   }
 
   private resize() {
@@ -336,7 +475,7 @@ export class RobotScene {
         ry: THREE.MathUtils.radToDeg(this.tcpRotation.y),
         rz: THREE.MathUtils.radToDeg(this.tcpRotation.z),
       },
-      sourceLink: this.tcpLink.name || TCP_LINK_NAME,
+      sourceLink: this.tcpLink.name,
       timestamp: performance.now(),
     })
   }

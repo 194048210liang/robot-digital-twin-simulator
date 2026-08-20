@@ -2,43 +2,95 @@
 import { computed, ref } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faDownload, faGear, faTrashCan } from '@fortawesome/free-solid-svg-icons'
-import type { LogChannel, RobotLog } from '@/robot/types'
+import { useRoute, useRouter } from 'vue-router'
+import type { RobotLog } from '@/robot/types'
+import type { SimulationRecord } from '@/robot/simulation-validation'
 import { useRobotStore } from '@/stores/robot'
+import { useValidationStore } from '@/stores/validation'
+import { downloadTextFile } from '@/utils/download'
 
+type BottomTab = 'event' | 'validation' | 'communication'
+
+const route = useRoute()
+const router = useRouter()
 const store = useRobotStore()
+const validation = useValidationStore()
+const activeTab = ref<BottomTab>('event')
 const autoScroll = ref(true)
 const keepAcks = ref(true)
-const tabs: { id: LogChannel; label: string }[] = [
-  { id: 'alarm', label: '报警' },
-  { id: 'command', label: '命令' },
-  { id: 'communication', label: '通信' },
+const tabs: { id: BottomTab; label: string }[] = [
+  { id: 'event', label: '仿真事件' },
+  { id: 'validation', label: '验证记录' },
+  { id: 'communication', label: '通信诊断' },
 ]
-const statusLabel = computed(() => `${store.logs.length} / 500`)
-const emptyText = computed(
-  () => `暂无${tabs.find((tab) => tab.id === store.consoleTab)?.label ?? ''}记录`,
+const eventLogs = computed(() =>
+  store.logs.filter(
+    (log) =>
+      log.channel !== 'communication' ||
+      (log.direction === 'SYS' && log.source !== '通信' && log.source !== 'Mock'),
+  ),
 )
+const communicationLogs = computed(() =>
+  store.logs.filter(
+    (log) => log.channel === 'communication' && (keepAcks.value || log.code !== 'ACK'),
+  ),
+)
+const visibleLogs = computed(() =>
+  activeTab.value === 'communication' ? communicationLogs.value : eventLogs.value,
+)
+const statusLabel = computed(() => `${store.logs.length} / 500`)
 
-function exportLogs() {
-  const blob = new Blob([JSON.stringify(store.logs, null, 2)], { type: 'application/json' })
-  const link = document.createElement('a')
-  link.href = URL.createObjectURL(blob)
-  link.download = `robostation-logs-${Date.now()}.json`
-  link.click()
-  URL.revokeObjectURL(link.href)
+function exportVisibleLogs() {
+  const name = activeTab.value === 'communication' ? 'communication' : 'simulation-events'
+  downloadTextFile(
+    `robostation-${name}-${Date.now()}.json`,
+    JSON.stringify(visibleLogs.value, null, 2),
+    'application/json;charset=utf-8',
+  )
 }
 
 function levelLabel(log: RobotLog) {
   return { info: '信息', warning: '警告', error: '错误' }[log.level]
 }
+
+function recordStatus(status: string) {
+  return {
+    running: '采样中',
+    paused: '已暂停',
+    completed: '已完成',
+    stopped: '已停止',
+    error: '异常',
+    idle: '未开始',
+  }[status]
+}
+
+function formatDate(timestamp: number | null) {
+  return timestamp ? new Date(timestamp).toLocaleString('zh-CN', { hour12: false }) : '—'
+}
+
+function formatDuration(milliseconds: number) {
+  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(2)} s`
+  const seconds = Math.floor(milliseconds / 1000)
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+function showRecord(recordId: string) {
+  validation.select(recordId)
+  void router.replace({ query: { ...route.query, tab: 'validation' } })
+}
+
+function openValidationRow(row: SimulationRecord) {
+  showRecord(row.id)
+}
 </script>
 
 <template>
-  <section class="console panel" aria-label="诊断控制台">
-    <ElTabs v-model="store.consoleTab" class="console-tabs" aria-label="诊断类型">
+  <section class="console panel" aria-label="仿真数据台">
+    <ElTabs v-model="activeTab" class="console-tabs" aria-label="仿真数据类型">
       <ElTabPane v-for="tab in tabs" :key="tab.id" :name="tab.id">
         <template #label>
           <ElBadge
-            v-if="tab.id === 'alarm'"
+            v-if="tab.id === 'event'"
             :value="store.warningCount"
             :hidden="store.warningCount === 0"
             class="alarm-badge"
@@ -52,16 +104,17 @@ function levelLabel(log: RobotLog) {
 
     <div class="log-table-wrap">
       <ElTable
+        v-if="activeTab !== 'validation'"
         class="log-table adaptive-table"
-        :data="store.filteredLogs"
-        :empty-text="emptyText"
+        :data="visibleLogs"
+        :empty-text="activeTab === 'communication' ? '暂无通信诊断记录' : '暂无仿真事件'"
         row-key="id"
         border
         size="small"
         height="100%"
       >
         <ElTableColumn prop="time" label="时间" width="130" />
-        <ElTableColumn v-if="store.consoleTab !== 'communication'" label="级别" width="82">
+        <ElTableColumn v-if="activeTab === 'event'" label="级别" width="82">
           <template #default="{ row }">
             <span :class="row.level">{{ levelLabel(row) }}</span>
           </template>
@@ -71,11 +124,11 @@ function levelLabel(log: RobotLog) {
             <span :class="row.direction === 'RX' ? 'rx' : 'tx'">● {{ row.direction }}</span>
           </template>
         </ElTableColumn>
-        <ElTableColumn prop="source" label="来源" width="88" />
-        <ElTableColumn prop="code" label="代码 / 类型" width="130" />
-        <ElTableColumn prop="message" label="命令 / 消息" min-width="260" show-overflow-tooltip />
-        <ElTableColumn prop="details" label="参数 / 数据" min-width="260" show-overflow-tooltip />
-        <ElTableColumn v-if="store.consoleTab === 'communication'" label="往返时间" width="110">
+        <ElTableColumn prop="source" label="来源" width="96" />
+        <ElTableColumn prop="code" label="代码 / 类型" width="140" />
+        <ElTableColumn prop="message" label="事件 / 消息" min-width="280" show-overflow-tooltip />
+        <ElTableColumn prop="details" label="数据 / 详情" min-width="280" show-overflow-tooltip />
+        <ElTableColumn v-if="activeTab === 'communication'" label="往返时间" width="110">
           <template #default="{ row }">{{ row.latency ? `${row.latency} ms` : '—' }}</template>
         </ElTableColumn>
         <ElTableColumn label="状态" width="90">
@@ -84,27 +137,90 @@ function levelLabel(log: RobotLog) {
           </template>
         </ElTableColumn>
       </ElTable>
+
+      <ElTable
+        v-else
+        class="log-table validation-table adaptive-table"
+        :data="validation.records"
+        empty-text="播放任务后将在此生成验证记录"
+        row-key="id"
+        border
+        size="small"
+        height="100%"
+        @row-dblclick="openValidationRow"
+      >
+        <ElTableColumn type="index" label="序号" width="62" align="center" />
+        <ElTableColumn label="开始时间" width="180">
+          <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
+        </ElTableColumn>
+        <ElTableColumn prop="taskName" label="任务名称" min-width="210" show-overflow-tooltip />
+        <ElTableColumn label="完成状态" width="100" align="center">
+          <template #default="{ row }">
+            <span
+              :class="row.summary.passed ? 'success' : row.status === 'running' ? 'tx' : 'warning'"
+            >
+              {{ recordStatus(row.status) }}
+            </span>
+          </template>
+        </ElTableColumn>
+        <ElTableColumn label="运行时长" width="110" align="center">
+          <template #default="{ row }">{{ formatDuration(row.durationMs) }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="采样点" width="100" align="center">
+          <template #default="{ row }">{{ row.summary.sampleCount }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="TCP 路径" width="120" align="center">
+          <template #default="{ row }">{{ row.summary.tcpPathLength.toFixed(3) }} m</template>
+        </ElTableColumn>
+        <ElTableColumn label="关节越限" width="100" align="center">
+          <template #default="{ row }">{{ row.summary.positionViolationCount }}</template>
+        </ElTableColumn>
+        <ElTableColumn label="操作" width="90" align="center">
+          <template #default="{ row }">
+            <ElButton type="primary" link @click="showRecord(row.id)">查看</ElButton>
+          </template>
+        </ElTableColumn>
+      </ElTable>
     </div>
 
     <footer class="console-footer">
       <div class="footer-status">
-        <span>模型已加载：<strong>fetch_robot_v1.0</strong></span>
+        <span
+          >模型已加载：<strong>{{ store.modelName }}</strong></span
+        >
         <i />
-        <span>采样状态：<b>● 正常</b></span>
+        <span
+          >记录器：<b>● {{ validation.isRecording ? '采样中' : '就绪' }}</b></span
+        >
         <i />
-        <span>日志：{{ statusLabel }}</span>
+        <span>{{
+          activeTab === 'validation'
+            ? `验证记录：${validation.records.length}`
+            : `日志：${statusLabel}`
+        }}</span>
       </div>
       <div class="footer-actions">
-        <ElButton @click="store.clearLogs()">
-          <FontAwesomeIcon :icon="faTrashCan" />清除日志
+        <ElButton
+          v-if="activeTab === 'validation'"
+          :disabled="validation.isRecording"
+          @click="validation.clear()"
+        >
+          <FontAwesomeIcon :icon="faTrashCan" />清除记录
         </ElButton>
-        <ElButton @click="exportLogs"> <FontAwesomeIcon :icon="faDownload" />导出日志 </ElButton>
+        <template v-else>
+          <ElButton @click="store.clearLogs()">
+            <FontAwesomeIcon :icon="faTrashCan" />清除日志
+          </ElButton>
+          <ElButton @click="exportVisibleLogs">
+            <FontAwesomeIcon :icon="faDownload" />导出日志
+          </ElButton>
+        </template>
         <ElPopover placement="top-end" :width="230" trigger="click">
           <template #reference>
             <ElButton><FontAwesomeIcon :icon="faGear" />设置</ElButton>
           </template>
           <div class="settings-panel">
-            <strong>诊断设置</strong>
+            <strong>数据台设置</strong>
             <ElCheckbox v-model="autoScroll">自动滚动最新记录</ElCheckbox>
             <ElCheckbox v-model="keepAcks">保留通信 ACK</ElCheckbox>
           </div>
@@ -120,7 +236,7 @@ function levelLabel(log: RobotLog) {
   min-height: 0;
   display: grid;
   grid-template-rows: 36px minmax(0, 1fr) 44px;
-  overflow: visible;
+  overflow: hidden;
 }
 .console-tabs {
   border-bottom: 1px solid var(--line-300);
@@ -139,7 +255,7 @@ function levelLabel(log: RobotLog) {
   display: none;
 }
 .console-tabs :deep(.el-tabs__item) {
-  min-width: 88px;
+  min-width: 110px;
   height: 35px;
   padding: 0 22px;
   font-size: 13px;
@@ -176,6 +292,9 @@ function levelLabel(log: RobotLog) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
+}
+.validation-table :deep(.el-table__row) {
+  cursor: pointer;
 }
 .warning {
   color: var(--amber-600);

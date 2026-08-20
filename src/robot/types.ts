@@ -28,6 +28,13 @@ export interface JointState extends JointDefinition {
   velocity: number
 }
 
+export interface RobotModelProfile {
+  name: string
+  fileName: string
+  tcpLinkName: string
+  joints: JointDefinition[]
+}
+
 export interface TcpPose {
   x: number
   y: number

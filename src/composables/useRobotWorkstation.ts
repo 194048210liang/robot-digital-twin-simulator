@@ -43,7 +43,7 @@ export function useRobotWorkstation() {
       source: '状态',
       code: 'JOINT-STATE',
       message: '全量关节状态同步完成',
-      details: '11 个控制关节',
+      details: `${store.joints.length} 个控制关节`,
       latency: 20,
       status: '成功',
     })

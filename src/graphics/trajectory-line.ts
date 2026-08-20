@@ -27,6 +27,10 @@ export class TrajectoryLine {
     parent.add(this.line)
   }
 
+  detach() {
+    this.line.removeFromParent()
+  }
+
   setVisible(visible: boolean) {
     this.visible = visible
     this.line.visible = visible && this.count > 1
@@ -58,7 +62,7 @@ export class TrajectoryLine {
   }
 
   dispose() {
-    this.line.removeFromParent()
+    this.detach()
     this.geometry.dispose()
     this.material.dispose()
   }

@@ -2,16 +2,18 @@
 import { computed } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import {
-  faBox,
   faCircleCheck,
-  faLink,
+  faCrosshairs,
   faRobot,
-  faShieldHalved,
+  faSliders,
+  faWaveSquare,
 } from '@fortawesome/free-solid-svg-icons'
 import { useRobotStore } from '@/stores/robot'
+import { useValidationStore } from '@/stores/validation'
 
 defineProps<{ currentTime: string }>()
 const store = useRobotStore()
+const validation = useValidationStore()
 
 const motionLabel = computed(() => {
   const labels = {
@@ -27,13 +29,27 @@ const motionLabel = computed(() => {
 
 <template>
   <div class="status-strip" aria-label="系统状态">
-    <div class="status-cell mode"><FontAwesomeIcon :icon="faBox" />仿真模式</div>
-    <div class="status-cell"><FontAwesomeIcon class="ok" :icon="faCircleCheck" />系统就绪</div>
-    <div class="status-cell"><FontAwesomeIcon class="ok" :icon="faShieldHalved" />安全正常</div>
-    <div class="status-cell">
-      <span class="label">模型：</span><FontAwesomeIcon :icon="faRobot" /> Fetch
+    <div class="status-cell mode">
+      <FontAwesomeIcon class="ok" :icon="faCircleCheck" />仿真{{
+        store.modelLoaded ? '就绪' : '加载中'
+      }}
     </div>
-    <div class="status-cell"><FontAwesomeIcon class="connected" :icon="faLink" />Mock 已连接</div>
+    <div class="status-cell model">
+      <span class="label">模型：</span><FontAwesomeIcon :icon="faRobot" />
+      <span class="model-name" :title="store.modelName">{{ store.modelName }}</span>
+    </div>
+    <div class="status-cell">
+      <FontAwesomeIcon :icon="faSliders" /><span class="label">可控关节：</span
+      >{{ store.joints.length }}
+    </div>
+    <div class="status-cell tcp-source">
+      <FontAwesomeIcon :icon="faCrosshairs" /><span class="label">TCP：</span>
+      <span :title="store.tcpState.sourceLink">{{ store.tcpState.sourceLink || '未识别' }}</span>
+    </div>
+    <div class="status-cell">
+      <FontAwesomeIcon :class="{ ok: validation.isRecording }" :icon="faWaveSquare" />
+      <span class="label">采样：</span>{{ validation.isRecording ? '记录中' : '就绪' }}
+    </div>
     <div class="status-cell"><span class="label">FPS：</span>{{ store.fps || '—' }}</div>
     <div class="status-cell motion"><span class="label">运动状态：</span>{{ motionLabel }}</div>
     <time class="clock">{{ currentTime }}</time>
@@ -44,7 +60,7 @@ const motionLabel = computed(() => {
 .status-strip {
   height: 50px;
   display: grid;
-  grid-template-columns: 136px 154px 156px 148px 164px 126px 1fr auto;
+  grid-template-columns: 142px minmax(170px, 1fr) 148px minmax(150px, 1fr) 142px 104px 156px auto;
   align-items: center;
   border-bottom: 1px solid var(--line-300);
   background: linear-gradient(#fff, #f6f8fa);
@@ -66,12 +82,19 @@ const motionLabel = computed(() => {
 .status-cell svg {
   color: var(--blue-600);
 }
-.status-cell svg.ok,
-.status-cell svg.connected {
+.status-cell svg.ok {
   color: var(--green-600);
 }
 .label {
   color: var(--ink-700);
+}
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tcp-source > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .motion {
   min-width: 150px;
@@ -84,7 +107,7 @@ const motionLabel = computed(() => {
 }
 @media (max-width: 1280px) {
   .status-strip {
-    grid-template-columns: repeat(6, auto) 1fr auto;
+    grid-template-columns: auto minmax(140px, 1fr) auto minmax(120px, 1fr) auto auto auto auto;
   }
   .status-cell {
     padding: 0 13px;

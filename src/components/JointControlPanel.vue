@@ -17,7 +17,9 @@ const draftDescription = ref('')
 const pendingJointPositions = new Map<string, number>()
 let teachingFrame = 0
 const grouped = computed(() =>
-  groups.map((group) => ({ group, joints: store.joints.filter((joint) => joint.group === group) })),
+  groups
+    .map((group) => ({ group, joints: store.joints.filter((joint) => joint.group === group) }))
+    .filter((section) => section.joints.length > 0),
 )
 const canTeach = computed(
   () =>
