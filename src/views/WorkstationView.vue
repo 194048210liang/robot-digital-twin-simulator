@@ -100,10 +100,10 @@ function changeLanguage(command: AppLocale) {
           <ElTabPane :label="t('validation.title')" name="validation" />
         </ElTabs>
         <div class="control-content">
-          <JointControlPanel v-show="activePanel === 'joint'" />
-          <TcpStatusPanel v-show="activePanel === 'tcp'" />
+          <JointControlPanel v-if="activePanel === 'joint'" />
+          <TcpStatusPanel v-if="activePanel === 'tcp'" />
           <RobotTaskPanel v-show="activePanel === 'task'" />
-          <ValidationPanel v-show="activePanel === 'validation'" />
+          <ValidationPanel v-if="activePanel === 'validation'" />
         </div>
         <MotionControls
           :show-execute="false"

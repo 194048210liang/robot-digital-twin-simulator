@@ -47,6 +47,7 @@ describe('external algorithm trajectory', () => {
     expect(getAlgorithmTrajectoryCompatibilityError(file, joints, 'tool0')).toBeNull()
 
     const task = algorithmTrajectoryToTaskInput(file, joints)
+    expect(task.model).toEqual(file.model)
     expect(task.steps).toHaveLength(1)
     expect(task.steps[0]?.targets).toEqual([{ jointId: 'joint-a', position: 0.25 }])
     expect(task.steps[0]?.targetTcpPose).toEqual(file.trajectory[0]?.targetPose)

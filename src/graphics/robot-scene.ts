@@ -243,6 +243,7 @@ export class RobotScene {
       this.mountRobot(robot, profile)
       manager.onLoad = () => {
         if (this.robot !== robot) return
+        this.optimizeStaticObjects(robot)
         robot.updateMatrixWorld(true)
         this.fitCamera()
       }
@@ -409,11 +410,7 @@ export class RobotScene {
     this.removeCurrentRobot()
     this.robot = robot
     robot.rotation.x = -Math.PI / 2
-    robot.traverse((object) => {
-      if (!(object instanceof THREE.Mesh)) return
-      object.castShadow = false
-      object.receiveShadow = false
-    })
+    this.optimizeStaticObjects(robot)
     this.scene.add(robot)
     this.tcpLink = profile.tcpLinkName
       ? (robot.links[profile.tcpLinkName] ?? robot.getObjectByName(profile.tcpLinkName) ?? null)
@@ -435,6 +432,18 @@ export class RobotScene {
       this.fitCamera()
     }, 350)
     this.callbacks.onModelLoaded(profile)
+  }
+
+  private optimizeStaticObjects(robot: URDFRobot) {
+    robot.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        object.castShadow = false
+        object.receiveShadow = false
+      }
+      if ('isURDFJoint' in object && object.isURDFJoint) return
+      object.updateMatrix()
+      object.matrixAutoUpdate = false
+    })
   }
 
   private removeCurrentRobot() {
@@ -527,7 +536,6 @@ export class RobotScene {
     }
 
     if (!changed) return
-    this.robot.updateMatrixWorld(true)
     this.needsRender = true
     if (now - this.lastTcpUpdate >= 50) {
       this.updateTcpState()

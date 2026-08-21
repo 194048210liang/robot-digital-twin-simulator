@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { TableColumnCtx } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { toDisplayValue, toInternalValue } from '@/robot/config'
+import { getSimulationVelocity, toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
 import type { JointGroup, JointState } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
@@ -185,7 +185,9 @@ function groupLabel(group?: JointGroup) {
         <div>
           <span>{{ t('joint.speed', { unit: selected.displayUnit }) }}</span>
           <strong>{{
-            Math.abs(toDisplayValue(selected, selected.maxVelocity * store.speedScale)).toFixed(1)
+            Math.abs(
+              toDisplayValue(selected, getSimulationVelocity(selected) * store.speedScale),
+            ).toFixed(1)
           }}</strong>
         </div>
         <ElSlider

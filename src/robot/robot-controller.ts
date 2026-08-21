@@ -83,6 +83,49 @@ export class RobotController {
     return true
   }
 
+  setJointTargets(targets: Array<{ jointId: string; target: number }>) {
+    if (!targets.length) return false
+    const resolvedTargets = targets.map(({ jointId, target }) => ({
+      joint: this.store.findJoint(jointId),
+      target,
+    }))
+    const invalidTarget = resolvedTargets.find(
+      ({ joint, target }) => !joint || !isTargetWithinLimits(target, joint.min, joint.max),
+    )
+    if (invalidTarget) {
+      if (invalidTarget.joint) {
+        this.store.safetyState = 'warning'
+        this.store.addLog({
+          level: 'warning',
+          channel: 'alarm',
+          direction: 'SYS',
+          source: 'CONTROL',
+          code: 'JOINT-LIMIT',
+          messageKey: 'joint.messages.positionOutOfLimit',
+          messageParams: { name: invalidTarget.joint.displayName },
+          detailsText: `${toDisplayValue(invalidTarget.joint, invalidTarget.target).toFixed(invalidTarget.joint.displayDecimals)} ${invalidTarget.joint.displayUnit}`,
+          status: 'WARNING',
+        })
+      }
+      return false
+    }
+
+    for (const { joint, target } of resolvedTargets) {
+      if (joint) joint.target = target
+    }
+    const lastJoint = resolvedTargets.at(-1)?.joint
+    if (lastJoint) this.store.selectedJointId = lastJoint.id
+    this.store.safetyState = 'normal'
+    void this.send(
+      {
+        type: 'SET_JOINT_TARGETS',
+        targets: targets.map((target) => ({ ...target })),
+      },
+      'joint.messages.batchApplied',
+    )
+    return true
+  }
+
   teachJointPosition(jointId: string, position: number) {
     const joint = this.store.findJoint(jointId)
     if (

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { faFileImport } from '@fortawesome/free-solid-svg-icons'
 import { ElMessage } from 'element-plus'
@@ -15,6 +15,7 @@ import {
 import { toDisplayValue } from '@/robot/config'
 import { isSameJointPose, type RobotTask } from '@/robot/task'
 import {
+  createJointSignature,
   createRobotTaskFile,
   getTaskCompatibilityError,
   parseRobotTaskFile,
@@ -33,6 +34,8 @@ const { canExecuteTask, executeTask: runTask } = useRobotTaskRunner()
 const playingTaskId = ref('')
 const taskFileInput = ref<HTMLInputElement>()
 const algorithmFileInput = ref<HTMLInputElement>()
+const taskTable = ref<{ clearSelection: () => void }>()
+const selectedTasks = ref<RobotTask[]>([])
 
 function issueText(issue: TranslationDescriptor | null, fallbackKey: string) {
   return issue ? t(issue.key, issue.params ?? {}) : t(fallbackKey)
@@ -50,8 +53,75 @@ const activeStatusType = computed(() => {
   } as const
   return types[taskStore.runtime.status]
 })
+const currentJointSignature = computed(() => createJointSignature(robotStore.joints))
+const currentModelKey = computed(
+  () => `${currentJointSignature.value}::${robotStore.tcpState.sourceLink}`,
+)
+const currentModelTaskCount = computed(
+  () => taskStore.tasks.filter((task) => isCurrentModelTask(task)).length,
+)
+const otherModelTaskCount = computed(() => taskStore.tasks.length - currentModelTaskCount.value)
+
+function isCurrentModelTask(task: RobotTask) {
+  if (task.model) {
+    if (task.model.jointSignature !== currentJointSignature.value) return false
+    return (
+      !task.steps.some((step) => step.targetTcpPose) ||
+      task.model.tcpLinkName === robotStore.tcpState.sourceLink
+    )
+  }
+
+  return task.steps.every((step) =>
+    step.targets.every((target) => {
+      const joint = robotStore.findJoint(target.jointId)
+      return Boolean(
+        joint && target.position >= joint.min - 0.000001 && target.position <= joint.max + 0.000001,
+      )
+    }),
+  )
+}
+
+function taskModelLabel(task: RobotTask) {
+  if (!task.model) return t('task.legacyUnboundModel')
+  return task.model.name || task.model.fileName
+}
+
+function canSelectTask(task: RobotTask) {
+  return !(
+    taskStore.runtime.activeTaskId === task.id &&
+    (taskStore.runtime.status === 'running' || taskStore.runtime.status === 'paused')
+  )
+}
+
+function taskRowClass({ row }: { row: RobotTask }) {
+  return isCurrentModelTask(row) ? '' : 'other-model-task'
+}
+
+function updateTaskSelection(rows: RobotTask[]) {
+  selectedTasks.value = rows
+}
+
+function removeSelectedTasks() {
+  const removedCount = taskStore.removeTasks(selectedTasks.value.map((task) => task.id))
+  if (!removedCount) {
+    ElMessage.warning(issueText(taskStore.persistenceError, 'task.messages.cannotRemovePlaying'))
+    return
+  }
+  selectedTasks.value = []
+  taskTable.value?.clearSelection()
+  ElMessage.success(t('task.messages.removedMany', { count: removedCount }))
+}
+
+watch(currentModelKey, () => {
+  selectedTasks.value = []
+  taskTable.value?.clearSelection()
+})
 
 async function playTask(task: RobotTask) {
+  if (!isCurrentModelTask(task)) {
+    ElMessage.warning(t('task.messages.modelMismatch'))
+    return
+  }
   const currentPose = robotStore.joints.map((joint) => ({
     jointId: joint.id,
     position: joint.current,
@@ -111,7 +181,7 @@ async function importTask(event: Event) {
     )
     if (compatibilityError)
       throw new Error(issueText(compatibilityError, 'task.messages.importFailed'))
-    const task = taskStore.importTask(taskDocument.task)
+    const task = taskStore.importTask(taskDocument.task, taskDocument.model)
     if (!task) throw new Error(issueText(taskStore.persistenceError, 'task.messages.importFailed'))
     ElMessage.success(t('task.messages.imported', { name: task.name }))
   } catch (error) {
@@ -238,17 +308,42 @@ function formatTcpTarget(pose: TcpPose) {
     <section class="task-list">
       <div class="section-title">
         <h3>{{ t('task.savedTasks') }}</h3>
-        <span>{{ t('task.taskCount', { count: taskStore.tasks.length }) }}</span>
+        <div class="task-list-tools">
+          <span>
+            {{
+              t('task.modelTaskSummary', {
+                current: currentModelTaskCount,
+                other: otherModelTaskCount,
+              })
+            }}
+          </span>
+          <ElPopconfirm
+            :title="t('task.deleteSelectedConfirm', { count: selectedTasks.length })"
+            :confirm-button-text="t('common.confirm')"
+            :cancel-button-text="t('common.cancel')"
+            @confirm="removeSelectedTasks"
+          >
+            <template #reference>
+              <ElButton type="danger" plain size="small" :disabled="!selectedTasks.length">
+                {{ t('task.deleteSelected', { count: selectedTasks.length }) }}
+              </ElButton>
+            </template>
+          </ElPopconfirm>
+        </div>
       </div>
       <ElTable
         v-if="taskStore.tasks.length"
+        ref="taskTable"
         class="adaptive-table"
         :data="taskStore.tasks"
         border
         size="small"
         row-key="id"
         height="100%"
+        :row-class-name="taskRowClass"
+        @selection-change="updateTaskSelection"
       >
+        <ElTableColumn type="selection" width="38" :selectable="canSelectTask" />
         <ElTableColumn type="expand" width="38">
           <template #default="{ row }">
             <div class="step-list">
@@ -270,12 +365,14 @@ function formatTcpTarget(pose: TcpPose) {
             </div>
           </template>
         </ElTableColumn>
-        <ElTableColumn
-          prop="name"
-          :label="t('task.taskName')"
-          min-width="142"
-          show-overflow-tooltip
-        />
+        <ElTableColumn :label="t('task.taskName')" min-width="154">
+          <template #default="{ row }">
+            <div class="task-name-cell">
+              <strong>{{ row.name }}</strong>
+              <small>{{ taskModelLabel(row) }}</small>
+            </div>
+          </template>
+        </ElTableColumn>
         <ElTableColumn :label="t('task.pose')" width="62" align="center">
           <template #default="{ row }">{{ row.steps.length }}</template>
         </ElTableColumn>
@@ -284,8 +381,11 @@ function formatTcpTarget(pose: TcpPose) {
         </ElTableColumn>
         <ElTableColumn :label="t('common.status')" width="78" align="center">
           <template #default="{ row }">
+            <ElTag v-if="!isCurrentModelTask(row)" type="warning" effect="plain" size="small">
+              {{ t('task.otherModel') }}
+            </ElTag>
             <ElTag
-              v-if="taskStore.runtime.activeTaskId === row.id"
+              v-else-if="taskStore.runtime.activeTaskId === row.id"
               :type="activeStatusType"
               effect="plain"
               size="small"
@@ -301,7 +401,7 @@ function formatTcpTarget(pose: TcpPose) {
               type="primary"
               link
               :loading="playingTaskId === row.id"
-              :disabled="!canExecuteTask"
+              :disabled="!canExecuteTask || !isCurrentModelTask(row)"
               :aria-label="t('task.playTaskAria', { name: row.name })"
               @click="playTask(row)"
             >
@@ -310,12 +410,18 @@ function formatTcpTarget(pose: TcpPose) {
             <ElButton
               type="primary"
               link
+              :disabled="!isCurrentModelTask(row)"
               :aria-label="t('task.exportTaskAria', { name: row.name })"
               @click="exportTask(row)"
             >
               {{ t('task.export') }}
             </ElButton>
-            <ElPopconfirm :title="t('task.deleteConfirm')" @confirm="removeTask(row)">
+            <ElPopconfirm
+              :title="t('task.deleteConfirm')"
+              :confirm-button-text="t('common.confirm')"
+              :cancel-button-text="t('common.cancel')"
+              @confirm="removeTask(row)"
+            >
               <template #reference>
                 <ElButton
                   type="danger"
@@ -450,8 +556,18 @@ h3 {
   padding: 0 10px;
   border-bottom: 1px solid var(--line-200);
 }
-.section-title span {
+.task-list-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.task-list-tools > span {
   color: var(--ink-500);
+  font-size: 11px;
+}
+.task-list-tools :deep(.el-button) {
+  height: 24px;
+  padding: 0 9px;
   font-size: 11px;
 }
 .task-list :deep(.el-table__cell) {
@@ -459,6 +575,28 @@ h3 {
 }
 .task-list :deep(.cell) {
   font-size: 11.5px;
+}
+.task-list :deep(.other-model-task > td.el-table__cell) {
+  background: #fffaf0;
+}
+.task-name-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 16px;
+}
+.task-name-cell strong,
+.task-name-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-name-cell strong {
+  font-weight: 500;
+}
+.task-name-cell small {
+  color: var(--ink-500);
+  font-size: 10px;
 }
 .task-list :deep(.el-table__expanded-cell) {
   padding: 8px 12px;

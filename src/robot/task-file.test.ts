@@ -48,6 +48,7 @@ describe('robot task file', () => {
     })
 
     expect(parseRobotTaskFile(JSON.parse(JSON.stringify(file)))).toEqual(file)
+    expect(file.task.model).toEqual(file.model)
     expect(getTaskCompatibilityError(file, [joint()])).toBeNull()
   })
 

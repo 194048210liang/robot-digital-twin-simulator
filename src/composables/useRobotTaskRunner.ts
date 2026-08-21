@@ -85,8 +85,10 @@ export function useRobotTaskRunner() {
     }
 
     taskStore.startStep(stepIndex, currentPositions())
-    controller.setSpeedScale(step.speedScale)
-    for (const target of step.targets) controller.setJointTarget(target.jointId, target.position)
+    if (robotStore.speedScale !== step.speedScale) controller.setSpeedScale(step.speedScale)
+    controller.setJointTargets(
+      step.targets.map((target) => ({ jointId: target.jointId, target: target.position })),
+    )
     await controller.execute()
     synchronizeRuntime()
     return true

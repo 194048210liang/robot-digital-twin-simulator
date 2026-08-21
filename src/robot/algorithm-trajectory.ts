@@ -204,6 +204,7 @@ export function algorithmTrajectoryToTaskInput(
   return {
     name: file.name,
     description: file.description,
+    model: { ...file.model, jointIds: [...file.model.jointIds] },
     steps: file.trajectory.map((point) => ({
       id: '',
       speedScale: point.speedScale,

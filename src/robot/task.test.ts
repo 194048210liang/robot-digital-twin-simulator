@@ -27,6 +27,14 @@ function taskStep(id = 'step-1', position = 0.5) {
   }
 }
 
+const modelBinding = {
+  name: 'Test Robot',
+  fileName: 'test.urdf',
+  tcpLinkName: 'tool0',
+  jointSignature: 'joint-a:revolute:-1:1',
+  jointIds: ['joint-a'],
+}
+
 describe('robot task', () => {
   beforeEach(() => {
     installStorage()
@@ -87,11 +95,15 @@ describe('robot task', () => {
     const task = store.createTask({
       name: '算法任务',
       steps: [{ ...taskStep(), targetTcpPose }],
+      model: modelBinding,
     })
 
     expect(task?.steps[0]?.targetTcpPose).toEqual(targetTcpPose)
+    expect(task?.model).toEqual(modelBinding)
     if (!task) return
-    expect(store.importTask(task)?.steps[0]?.targetTcpPose).toEqual(targetTcpPose)
+    const imported = store.importTask(task)
+    expect(imported?.steps[0]?.targetTcpPose).toEqual(targetTcpPose)
+    expect(imported?.model).toEqual(modelBinding)
   })
 
   it('拒绝连续添加完全相同的姿态', () => {
@@ -115,6 +127,32 @@ describe('robot task', () => {
     expect(store.removeTask(task.id)).toBe(true)
   })
 
+  it('批量删除多个非运行任务并一次更新任务列表', () => {
+    const store = useRobotTaskStore()
+    const first = store.createTask({ name: '任务一', steps: [taskStep()] })
+    const second = store.createTask({ name: '任务二', steps: [taskStep()] })
+    const third = store.createTask({ name: '任务三', steps: [taskStep()] })
+    expect(first && second && third).toBeTruthy()
+    if (!first || !second || !third) return
+
+    expect(store.removeTasks([first.id, third.id])).toBe(2)
+    expect(store.tasks.map((task) => task.id)).toEqual([second.id])
+    expect(localStorage.getItem('robostation.robot-tasks.v1')).toContain(second.id)
+    expect(localStorage.getItem('robostation.robot-tasks.v1')).not.toContain(first.id)
+  })
+
+  it('批量删除包含运行任务时不删除任何任务', () => {
+    const store = useRobotTaskStore()
+    const active = store.createTask({ name: '运行任务', steps: [taskStep()] })
+    const idle = store.createTask({ name: '待机任务', steps: [taskStep()] })
+    expect(active && idle).toBeTruthy()
+    if (!active || !idle) return
+
+    store.startTask(active.id, 1, { 'joint-a': 0 })
+    expect(store.removeTasks([active.id, idle.id])).toBe(0)
+    expect(store.tasks).toHaveLength(2)
+  })
+
   it('将旧版单姿态任务迁移为一个步骤', () => {
     localStorage.setItem(
       'robostation.robot-tasks.v1',
@@ -136,6 +174,7 @@ describe('robot task', () => {
     expect(task).toBeDefined()
     if (!task) return
     expect(task.steps).toHaveLength(1)
+    expect(task.model).toBeUndefined()
     const [step] = task.steps
     expect(step).toBeDefined()
     expect(step?.targets[0]?.jointId).toBe('joint-a')

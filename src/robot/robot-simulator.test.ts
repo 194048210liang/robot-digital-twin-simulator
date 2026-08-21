@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { advancePosition, RobotSimulator } from './robot-simulator'
+import { getSimulationVelocity } from './config'
 import { useRobotStore } from '@/stores/robot'
 
 describe('advancePosition', () => {
@@ -12,6 +13,17 @@ describe('advancePosition', () => {
   it('支持负方向运动', () => {
     expect(advancePosition(0, -1, 0.25)).toBeCloseTo(-0.25)
     expect(advancePosition(-0.9, -1, 0.25)).toBe(-1)
+  })
+
+  it('导入模型优先使用平滑播放速度，同时兼容内置模型速度', () => {
+    setActivePinia(createPinia())
+    const store = useRobotStore()
+    const builtInJoint = store.findJoint('shoulder_pan_joint')!
+
+    expect(getSimulationVelocity(builtInJoint)).toBe(builtInJoint.maxVelocity)
+    expect(getSimulationVelocity({ ...builtInJoint, maxVelocity: 20, simulationVelocity: 2 })).toBe(
+      2,
+    )
   })
 
   it('示教位置同时更新当前值和目标值', () => {

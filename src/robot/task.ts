@@ -14,11 +14,20 @@ export interface RobotTaskStep {
   targetTcpPose?: TcpPose
 }
 
+export interface RobotTaskModelBinding {
+  name: string
+  fileName: string
+  tcpLinkName: string
+  jointSignature: string
+  jointIds: string[]
+}
+
 export interface RobotTask {
   id: string
   name: string
   description: string
   steps: RobotTaskStep[]
+  model?: RobotTaskModelBinding
   createdAt: number
   updatedAt: number
 }
@@ -39,6 +48,7 @@ export interface CreateRobotTaskInput {
   name: string
   description?: string
   steps: RobotTaskStep[]
+  model?: RobotTaskModelBinding
 }
 
 export const ROBOT_TASK_NAME_MAX_LENGTH = 40
@@ -85,6 +95,21 @@ function isRobotTaskStep(value: unknown): value is RobotTaskStep {
   )
 }
 
+export function isRobotTaskModelBinding(value: unknown): value is RobotTaskModelBinding {
+  return (
+    isRecord(value) &&
+    typeof value.name === 'string' &&
+    typeof value.fileName === 'string' &&
+    typeof value.tcpLinkName === 'string' &&
+    typeof value.jointSignature === 'string' &&
+    Boolean(value.jointSignature) &&
+    Array.isArray(value.jointIds) &&
+    value.jointIds.length > 0 &&
+    value.jointIds.every((jointId) => typeof jointId === 'string' && Boolean(jointId)) &&
+    new Set(value.jointIds).size === value.jointIds.length
+  )
+}
+
 export function normalizeTaskText(value: string, maxLength: number) {
   return value.trim().slice(0, maxLength)
 }
@@ -92,6 +117,7 @@ export function normalizeTaskText(value: string, maxLength: number) {
 export function cloneRobotTask(task: RobotTask): RobotTask {
   return {
     ...task,
+    model: task.model ? { ...task.model, jointIds: [...task.model.jointIds] } : undefined,
     steps: task.steps.map((step) => ({
       ...step,
       targets: step.targets.map((target) => ({ ...target })),
@@ -117,6 +143,7 @@ export function isRobotTask(value: unknown): value is RobotTask {
     return false
   }
   if (!Number.isFinite(value.createdAt) || !Number.isFinite(value.updatedAt)) return false
+  if (value.model !== undefined && !isRobotTaskModelBinding(value.model)) return false
   if (
     !Array.isArray(value.steps) ||
     value.steps.length === 0 ||

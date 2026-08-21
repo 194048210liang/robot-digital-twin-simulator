@@ -167,3 +167,6 @@ export const toDisplayValue = (joint: JointDefinition, internalValue: number) =>
 
 export const toInternalValue = (joint: JointDefinition, displayValue: number) =>
   displayValue / joint.displayScale
+
+export const getSimulationVelocity = (joint: JointDefinition) =>
+  joint.simulationVelocity ?? joint.maxVelocity

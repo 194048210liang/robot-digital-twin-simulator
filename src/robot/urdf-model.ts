@@ -4,9 +4,21 @@ import type { JointDefinition, RobotModelProfile } from './types'
 
 const REVOLUTE_DEFAULT_LIMIT = Math.PI
 const PRISMATIC_DEFAULT_LIMIT = 0.5
+const REVOLUTE_DEFAULT_VELOCITY = 1
+const PRISMATIC_DEFAULT_VELOCITY = 0.1
+const REVOLUTE_MAX_SIMULATION_VELOCITY = Math.PI
+const PRISMATIC_MAX_SIMULATION_VELOCITY = 0.5
 
-function finiteOr(value: number | undefined, fallback: number) {
-  return Number.isFinite(value) ? Number(value) : fallback
+export function resolveJointVelocity(value: number | undefined, prismatic: boolean) {
+  const fallback = prismatic ? PRISMATIC_DEFAULT_VELOCITY : REVOLUTE_DEFAULT_VELOCITY
+  const declaredVelocity = Number.isFinite(value) && Number(value) > 0 ? Number(value) : fallback
+  const simulationLimit = prismatic
+    ? PRISMATIC_MAX_SIMULATION_VELOCITY
+    : REVOLUTE_MAX_SIMULATION_VELOCITY
+  return {
+    maxVelocity: declaredVelocity,
+    simulationVelocity: Math.min(declaredVelocity, simulationLimit),
+  }
 }
 
 function hasUsableLimits(joint: URDFJoint) {
@@ -55,6 +67,7 @@ export function createJointDefinitions(joints: Record<string, URDFJoint>): Joint
         ? joint.limit.upper
         : fallbackLimit
     const home = Math.min(max, Math.max(min, 0))
+    const velocity = resolveJointVelocity(joint.limit.velocity, prismatic)
 
     return [
       {
@@ -66,10 +79,8 @@ export function createJointDefinitions(joints: Record<string, URDFJoint>): Joint
         min,
         max,
         home,
-        maxVelocity: Math.max(
-          finiteOr(joint.limit.velocity, prismatic ? 0.1 : 1),
-          prismatic ? 0.001 : 0.01,
-        ),
+        maxVelocity: velocity.maxVelocity,
+        simulationVelocity: velocity.simulationVelocity,
         displayScale: prismatic ? 1 : 180 / Math.PI,
         displayUnit: prismatic ? 'm' : '°',
         displayDecimals: prismatic ? 3 : 2,

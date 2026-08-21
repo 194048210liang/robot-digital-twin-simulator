@@ -1,4 +1,7 @@
 import type { useRobotStore } from '@/stores/robot'
+import { getSimulationVelocity } from './config'
+
+const MAX_FRAME_DELTA_SECONDS = 0.1
 
 export function advancePosition(current: number, target: number, maxDelta: number) {
   const delta = target - current
@@ -48,14 +51,14 @@ export class RobotSimulator {
   }
 
   private readonly tick = (now: number) => {
-    const deltaSeconds = Math.min((now - this.lastTime) / 1000, 0.05)
+    const deltaSeconds = Math.min((now - this.lastTime) / 1000, MAX_FRAME_DELTA_SECONDS)
     this.lastTime = now
 
     if (this.store.motionState === 'running') {
       let allArrived = true
       for (const joint of this.store.joints) {
         const previous = joint.current
-        const maxDelta = joint.maxVelocity * this.store.speedScale * deltaSeconds
+        const maxDelta = getSimulationVelocity(joint) * this.store.speedScale * deltaSeconds
         joint.current = advancePosition(joint.current, joint.target, maxDelta)
         joint.velocity = deltaSeconds > 0 ? (joint.current - previous) / deltaSeconds : 0
         if (Math.abs(joint.target - joint.current) > 0.00001) allArrived = false
