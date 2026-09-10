@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { toDisplayValue, toInternalValue } from '@/robot/config'
 import { useRobotController } from '@/robot/controller-context'
+import { createRobotTaskModelBinding } from '@/robot/task-file'
 import type { JointGroup, JointState, TranslationDescriptor } from '@/robot/types'
 import { useRobotStore } from '@/stores/robot'
 import { useRobotTaskStore } from '@/stores/tasks'
@@ -92,6 +93,12 @@ function saveTask() {
     name: draftName.value,
     description: draftDescription.value,
     steps: taskStore.draftSteps,
+    model: createRobotTaskModelBinding({
+      modelName: store.modelName,
+      modelFileName: store.modelFileName,
+      tcpLinkName: store.tcpState.sourceLink,
+      joints: store.joints,
+    }),
   })
   if (!task) {
     ElMessage.error(issueText(taskStore.persistenceError, 'task.messages.invalidName'))

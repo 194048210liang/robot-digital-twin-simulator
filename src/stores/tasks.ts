@@ -137,6 +137,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
         speedScale: Math.min(1, Math.max(0.1, step.speedScale)),
         targetTcpPose: step.targetTcpPose ? { ...step.targetTcpPose } : undefined,
       })),
+      model: input.model ? { ...input.model, jointIds: [...input.model.jointIds] } : undefined,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
@@ -148,7 +149,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
     return task
   }
 
-  function importTask(task: RobotTask) {
+  function importTask(task: RobotTask, model = task.model) {
     return createTask({
       name: task.name,
       description: task.description,
@@ -158,21 +159,32 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
         targets: step.targets.map((target) => ({ ...target })),
         targetTcpPose: step.targetTcpPose ? { ...step.targetTcpPose } : undefined,
       })),
+      model,
     })
   }
 
-  function removeTask(taskId: string) {
+  function removeTasks(taskIds: string[]) {
+    const selectedIds = new Set(taskIds)
+    if (!selectedIds.size) return 0
     if (
-      runtime.value.activeTaskId === taskId &&
+      runtime.value.activeTaskId &&
+      selectedIds.has(runtime.value.activeTaskId) &&
       (runtime.value.status === 'running' || runtime.value.status === 'paused')
     ) {
-      return false
+      return 0
     }
-    const nextTasks = tasks.value.filter((task) => task.id !== taskId)
-    if (nextTasks.length === tasks.value.length || !persist(nextTasks)) return false
+    const nextTasks = tasks.value.filter((task) => !selectedIds.has(task.id))
+    const removedCount = tasks.value.length - nextTasks.length
+    if (removedCount === 0 || !persist(nextTasks)) return 0
     tasks.value = nextTasks
-    if (runtime.value.activeTaskId === taskId) runtime.value = initialRuntime()
-    return true
+    if (runtime.value.activeTaskId && selectedIds.has(runtime.value.activeTaskId)) {
+      runtime.value = initialRuntime()
+    }
+    return removedCount
+  }
+
+  function removeTask(taskId: string) {
+    return removeTasks([taskId]) === 1
   }
 
   function startTask(taskId: string, totalSteps: number, startPositions: Record<string, number>) {
@@ -223,6 +235,7 @@ export const useRobotTaskStore = defineStore('robot-tasks', () => {
     clearDraft,
     createTask,
     importTask,
+    removeTasks,
     removeTask,
     startTask,
     startStep,

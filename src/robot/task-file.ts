@@ -1,16 +1,14 @@
-import { cloneRobotTask, isRobotTask, type RobotTask } from './task'
+import {
+  cloneRobotTask,
+  isRobotTask,
+  isRobotTaskModelBinding,
+  type RobotTask,
+  type RobotTaskModelBinding,
+} from './task'
 import type { JointState, TranslationDescriptor } from './types'
 
 export const ROBOT_TASK_FILE_FORMAT = 'robostation-task'
 export const ROBOT_TASK_FILE_VERSION = 1
-
-export interface RobotTaskModelBinding {
-  name: string
-  fileName: string
-  tcpLinkName: string
-  jointSignature: string
-  jointIds: string[]
-}
 
 export interface RobotTaskFile {
   format: typeof ROBOT_TASK_FILE_FORMAT
@@ -38,22 +36,29 @@ export function createJointSignature(joints: JointState[]) {
     .join('|')
 }
 
+export function createRobotTaskModelBinding(options: CreateTaskFileOptions): RobotTaskModelBinding {
+  return {
+    name: options.modelName,
+    fileName: options.modelFileName,
+    tcpLinkName: options.tcpLinkName,
+    jointSignature: createJointSignature(options.joints),
+    jointIds: options.joints.map((joint) => joint.id),
+  }
+}
+
 export function createRobotTaskFile(
   task: RobotTask,
   options: CreateTaskFileOptions,
 ): RobotTaskFile {
+  const model = createRobotTaskModelBinding(options)
+  const exportedTask = cloneRobotTask(task)
+  exportedTask.model = { ...model, jointIds: [...model.jointIds] }
   return {
     format: ROBOT_TASK_FILE_FORMAT,
     version: ROBOT_TASK_FILE_VERSION,
     exportedAt: new Date().toISOString(),
-    model: {
-      name: options.modelName,
-      fileName: options.modelFileName,
-      tcpLinkName: options.tcpLinkName,
-      jointSignature: createJointSignature(options.joints),
-      jointIds: options.joints.map((joint) => joint.id),
-    },
-    task: cloneRobotTask(task),
+    model,
+    task: exportedTask,
   }
 }
 
@@ -63,15 +68,7 @@ export function parseRobotTaskFile(value: unknown): RobotTaskFile | null {
     return null
   if (typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt)))
     return null
-  if (
-    typeof value.model.name !== 'string' ||
-    typeof value.model.fileName !== 'string' ||
-    typeof value.model.tcpLinkName !== 'string' ||
-    typeof value.model.jointSignature !== 'string' ||
-    !Array.isArray(value.model.jointIds) ||
-    !value.model.jointIds.every((jointId) => typeof jointId === 'string') ||
-    !isRobotTask(value.task)
-  ) {
+  if (!isRobotTaskModelBinding(value.model) || !isRobotTask(value.task)) {
     return null
   }
   return value as unknown as RobotTaskFile

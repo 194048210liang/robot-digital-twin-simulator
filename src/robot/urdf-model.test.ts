@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import type { URDFJoint } from 'urdf-loader'
-import { createJointDefinitions } from './urdf-model'
+import { createJointDefinitions, resolveJointVelocity } from './urdf-model'
 
 function joint(
   jointType: URDFJoint['jointType'],
@@ -34,6 +34,7 @@ describe('URDF 关节解析', () => {
       min: -1.2,
       max: 1.4,
       maxVelocity: 0.8,
+      simulationVelocity: 0.8,
       displayUnit: '°',
     })
     expect(definitions[1]).toMatchObject({
@@ -56,5 +57,20 @@ describe('URDF 关节解析', () => {
     expect(definitions).toHaveLength(1)
     expect(definitions[0]?.min).toBe(-Math.PI)
     expect(definitions[0]?.max).toBe(Math.PI)
+  })
+
+  it('缺少速度时使用仿真默认值，并限制异常大的播放速度', () => {
+    expect(resolveJointVelocity(0, false)).toEqual({
+      maxVelocity: 1,
+      simulationVelocity: 1,
+    })
+    expect(resolveJointVelocity(20, false)).toEqual({
+      maxVelocity: 20,
+      simulationVelocity: Math.PI,
+    })
+    expect(resolveJointVelocity(3, true)).toEqual({
+      maxVelocity: 3,
+      simulationVelocity: 0.5,
+    })
   })
 })

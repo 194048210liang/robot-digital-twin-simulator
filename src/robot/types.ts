@@ -33,6 +33,7 @@ export interface JointDefinition {
   max: number
   home: number
   maxVelocity: number
+  simulationVelocity?: number
   displayScale: number
   displayUnit: '°' | 'm' | 'mm'
   displayDecimals: number
@@ -85,6 +86,7 @@ export interface RobotLog {
 
 export type RobotCommand =
   | { type: 'SET_JOINT_TARGET'; jointId: string; target: number }
+  | { type: 'SET_JOINT_TARGETS'; targets: Array<{ jointId: string; target: number }> }
   | { type: 'RUN' }
   | { type: 'PAUSE' }
   | { type: 'RESUME' }
